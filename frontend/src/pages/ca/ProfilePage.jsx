@@ -35,10 +35,8 @@ import {
   CA_LANGUAGE_LABELS,
   CA_SPECIALIZATION_LABELS,
   CA_VERIFICATION_STATUS_LABELS,
-  comparedToMedian,
   label,
   SERVICE_UNIT_LABELS,
-  typicalRangeText,
 } from "@/lib";
 
 // --- CaProfilePage -----------------------------------------------------------------------------
@@ -430,7 +428,7 @@ const MAX_PRICE = 1000000;
 const PRICE_ERROR = "Enter a price from 1 to 10,00,000.";
 
 // /ca/services: the CA ticks the catalog services they offer and sets a price for
-// each. Next to every price is the typical range across verified CAs.
+// each. That price is the CA's fixed fee.
 export function CaServicesPage() {
   const profile = useCaProfile();
   const services = useServices();
@@ -474,8 +472,7 @@ export function CaServicesPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Services & prices</h1>
         <p className="text-sm text-muted-foreground">
-          Tick the services you offer and enter your fee. The typical range is worked out from the
-          prices of all verified CAs.
+          Tick the services you offer and enter your fee. Businesses pay exactly this fee.
         </p>
       </div>
       {content}
@@ -550,8 +547,6 @@ function PriceMenu({ services, menu, profile, verified }) {
     try {
       const savedMenu = await saveCaServices(items);
       queryClient.setQueryData(CA_SERVICES_KEY, savedMenu);
-      // The typical ranges include this CA's prices, so load them again.
-      queryClient.invalidateQueries({ queryKey: ["marketplace", "services"] });
       setSaved(true);
     } catch (error) {
       setServerError(errorMessage(error));
@@ -657,11 +652,6 @@ function priceId(serviceId) {
 }
 
 function ServiceRow({ service, row, error, onChange }) {
-  let hint = null;
-  if (row.offered && row.price !== "") {
-    hint = comparedToMedian(row.price, service.median_price);
-  }
-
   return (
     <li className="space-y-2 rounded-lg border p-3">
       <label htmlFor={"offer-" + service.id} className="flex items-center gap-2 font-medium">
@@ -688,8 +678,6 @@ function ServiceRow({ service, row, error, onChange }) {
           onChange={(event) => onChange({ price: event.target.value })}
         />
         <span>{label(SERVICE_UNIT_LABELS, service.unit)}</span>
-        <span className="text-muted-foreground">Typical: {typicalRangeText(service)}</span>
-        {hint && <span className="font-medium">{hint}</span>}
       </div>
       {error && (
         <p id={priceId(service.id) + "-error"} className="text-sm text-destructive">

@@ -49,10 +49,10 @@ Tax audit applicability is computed in the profile (it changes the ITR due date)
    Status lifecycle: `Upcoming → Docs pending → Ready → With CA → Filed → Filed–verified`; `Overdue` is reachable
    from any pre-filed state.
 6. **Document vault:** by financial year, period and type; OCR document-type verification.
-7. **CA marketplace:** match results with reasons; standard service catalog with listed prices and the platform's
-   typical price range; requests at the CA's fixed listed prices; ratings.
+7. **CA marketplace:** match results with reasons; standard service catalog with each CA's listed (fixed) prices;
+   requests at those prices; ratings.
 8. **Working with a CA:** CA document requests appear as to-dos; the client sees filing status and the verified acknowledgement.
-9. **Notifications:** email only, plus the in-app tray. Reminders at T-7, T-3, T-1 days and on overdue.
+9. **Notifications:** email, plus an inbox on the Notification settings page. Reminders at T-7, T-3, T-1 days and on overdue.
 10. **Profile lifecycle check:** at the start of each financial year and whenever a threshold is crossed.
 
 ## CA side

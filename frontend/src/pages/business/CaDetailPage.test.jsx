@@ -25,10 +25,6 @@ const GST_SERVICE = {
   name: "GSTR-3B filing",
   description: "Summary GST return.",
   unit: "per_return",
-  ca_count: 3,
-  min_price: "600.00",
-  median_price: "700.00",
-  max_price: "1000.00",
   price: "650.00",
 };
 const AUDIT_SERVICE = {
@@ -37,10 +33,6 @@ const AUDIT_SERVICE = {
   name: "Tax audit",
   description: "Audit for one year.",
   unit: "per_year",
-  ca_count: 1,
-  min_price: null,
-  median_price: null,
-  max_price: null,
   price: "25000.00",
 };
 
@@ -56,11 +48,8 @@ describe("CA detail page", () => {
 
     const gstRow = screen.getByText("GSTR-3B filing").closest("tr");
     expect(gstRow).toHaveTextContent("₹650 per return");
-    expect(gstRow).toHaveTextContent("Below the median");
-    expect(gstRow).toHaveTextContent("₹600 – ₹1,000, median ₹700 (3 CAs)");
     const auditRow = screen.getByText("Tax audit").closest("tr");
     expect(auditRow).toHaveTextContent("₹25,000 per year");
-    expect(auditRow).toHaveTextContent("Not enough data yet");
   });
 
   it("says so when the CA has no prices yet", async () => {

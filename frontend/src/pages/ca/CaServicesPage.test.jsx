@@ -15,10 +15,6 @@ const GST = {
   specialization: "gstr_3b",
   description: "Summary GST return.",
   unit: "per_return",
-  ca_count: 3,
-  min_price: "600.00",
-  median_price: "700.00",
-  max_price: "1000.00",
 };
 const AUDIT = {
   id: "22222222-2222-4222-8222-222222222222",
@@ -27,10 +23,6 @@ const AUDIT = {
   specialization: "tax_audit",
   description: "Audit for one year.",
   unit: "per_year",
-  ca_count: 1,
-  min_price: null,
-  median_price: null,
-  max_price: null,
 };
 const PROFILE = {
   id: "p1",
@@ -66,18 +58,15 @@ describe("CA services & prices page", () => {
     );
   });
 
-  it("shows the saved prices and the typical ranges", async () => {
+  it("shows the saved prices", async () => {
     loginAs("ca");
     api();
     renderApp("/ca/services");
 
     expect(await screen.findByLabelText("GSTR-3B filing")).toBeChecked();
     expect(screen.getByLabelText("Price for GSTR-3B filing")).toHaveValue("750");
-    expect(screen.getByText("Typical: ₹600 – ₹1,000, median ₹700 (3 CAs)")).toBeInTheDocument();
-    expect(screen.getByText("Above the median")).toBeInTheDocument();
     expect(screen.getByLabelText("Tax audit")).not.toBeChecked();
     expect(screen.getByLabelText("Price for Tax audit")).toBeDisabled();
-    expect(screen.getByText("Typical: Not enough data yet")).toBeInTheDocument();
   });
 
   it("saves the ticked services with their prices", async () => {

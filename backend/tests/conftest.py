@@ -21,7 +21,7 @@ automatically if it does not exist, in the `db` container of docker-compose.yml.
 
 import os
 import re
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -51,7 +51,6 @@ TEST_CONFIG = {
     "TESTING": True,
     "SECRET_KEY": "test-secret-key",
     "JWT_SECRET_KEY": "test-jwt-secret-key-that-is-long-enough",
-    "JWT_ACCESS_TOKEN_EXPIRES": timedelta(minutes=60),
     "SQLALCHEMY_DATABASE_URI": os.environ.get("TEST_DATABASE_URL"),
     "FIELD_ENCRYPTION_KEY": "Z5radg25qAqquvqRiPO960hRLtJmVhE0P3dYa_T1Mk8=",
     # Tests read emails from app.utils.outbox; nothing reaches Mailpit.

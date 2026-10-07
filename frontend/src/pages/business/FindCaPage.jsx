@@ -27,14 +27,12 @@ import {
 import {
   CA_LANGUAGE_LABELS,
   CA_SPECIALIZATION_LABELS,
-  comparedToMedian,
   filingFormLabel,
   formatDate,
   formatDateTime,
   formatRupees,
   label,
   SERVICE_UNIT_LABELS,
-  typicalRangeText,
 } from "@/lib";
 
 // --- MarketplacePage ---------------------------------------------------------------------------
@@ -168,12 +166,6 @@ export function MarketplacePage() {
       </form>
 
       <QueryStatus query={cas} />
-      {chosenService && (
-        <p className="text-sm">
-          <span className="font-medium">Typical fee for {chosenService.name}: </span>
-          {typicalRangeText(chosenService)} · {label(SERVICE_UNIT_LABELS, chosenService.unit)}
-        </p>
-      )}
       {cas.isSuccess && (
         <>
           <p className="text-sm text-muted-foreground">
@@ -207,10 +199,6 @@ function CaCard({ ca, service, search }) {
   let priceText = null;
   if (service && ca.price !== null) {
     priceText = formatRupees(ca.price) + " " + label(SERVICE_UNIT_LABELS, service.unit);
-    const hint = comparedToMedian(ca.price, service.median_price);
-    if (hint) {
-      priceText = priceText + " · " + hint;
-    }
   }
 
   return (
@@ -342,7 +330,7 @@ function CaDetails({ ca }) {
         <CardHeader>
           <CardTitle>Services & fees</CardTitle>
           <CardDescription>
-            The CA's listed fee for each service, next to what verified CAs typically charge.
+            The CA's fixed fee for each service.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -353,8 +341,7 @@ function CaDetails({ ca }) {
               <thead className="border-b text-muted-foreground">
                 <tr>
                   <th className="py-2 pr-4 font-medium">Service</th>
-                  <th className="py-2 pr-4 font-medium">Fee</th>
-                  <th className="py-2 font-medium">Typical</th>
+                  <th className="py-2 font-medium">Fee</th>
                 </tr>
               </thead>
               <tbody>
@@ -393,16 +380,13 @@ function CaDetails({ ca }) {
 }
 
 function ServiceRow({ service }) {
-  const hint = comparedToMedian(service.price, service.median_price);
   return (
     <tr className="border-b align-top">
       <td className="py-2 pr-4">{service.name}</td>
-      <td className="py-2 pr-4">
+      <td className="py-2">
         <span className="font-medium">{formatRupees(service.price)}</span>{" "}
         {label(SERVICE_UNIT_LABELS, service.unit)}
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </td>
-      <td className="py-2 text-muted-foreground">{typicalRangeText(service)}</td>
     </tr>
   );
 }
@@ -692,74 +676,5 @@ function FilingPrice({ filing, serviceId, onChoose }) {
         </option>
       ))}
     </select>
-  );
-}
-
-// --- TypicalFeesPage ---------------------------------------------------------------------------
-
-// /business/fees: what CAs on the platform typically charge for each service
-// (lowest, middle and highest price of the verified CAs who offer it).
-export function TypicalFeesPage() {
-  const services = useServices();
-
-  return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Typical fees</h1>
-        <p className="text-sm text-muted-foreground">
-          The fees listed by verified CAs on our platform. A range is shown once at least three CAs
-          offer the service.
-        </p>
-      </div>
-
-      <QueryStatus query={services} />
-      {services.isSuccess && (
-        <table className="w-full text-left text-sm">
-          <thead className="border-b text-muted-foreground">
-            <tr>
-              <th className="py-2 pr-4 font-medium">Service</th>
-              <th className="py-2 pr-4 font-medium">Lowest</th>
-              <th className="py-2 pr-4 font-medium">Median</th>
-              <th className="py-2 pr-4 font-medium">Highest</th>
-              <th className="py-2 pr-4 font-medium">CAs</th>
-              <th className="py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {services.data.map((service) => (
-              <tr key={service.id} className="border-b">
-                <td className="py-2 pr-4">
-                  {service.name}
-                  <span className="text-muted-foreground">
-                    {" "}
-                    ({label(SERVICE_UNIT_LABELS, service.unit)})
-                  </span>
-                </td>
-                {service.median_price === null ? (
-                  <td colSpan={3} className="py-2 pr-4 text-muted-foreground">
-                    Not enough data yet
-                  </td>
-                ) : (
-                  <>
-                    <td className="py-2 pr-4">{formatRupees(service.min_price)}</td>
-                    <td className="py-2 pr-4">{formatRupees(service.median_price)}</td>
-                    <td className="py-2 pr-4">{formatRupees(service.max_price)}</td>
-                  </>
-                )}
-                <td className="py-2 pr-4">{service.ca_count}</td>
-                <td className="py-2">
-                  <Link
-                    to={"/business/marketplace?service=" + service.code}
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    Find a CA
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
   );
 }

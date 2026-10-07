@@ -93,7 +93,7 @@ def test_shows_the_public_profile(client, business_headers, add_ca):
     assert "capacity" not in body
 
 
-def test_lists_offered_services_in_catalog_order_with_ranges(
+def test_lists_offered_services_in_catalog_order_with_prices(
     client, business_headers, add_ca, service, database
 ):
     itr = service("itr", sort_order=1)
@@ -101,9 +101,6 @@ def test_lists_offered_services_in_catalog_order_with_ranges(
     unused = service("tax_audit", sort_order=3)
     dropped = service("gstr_1", sort_order=4)
     profile = add_ca({gst: "650", itr: "1500", dropped: "400"})
-    # Two more CAs make three for GSTR-3B, so its range is known.
-    add_ca({gst: "600"})
-    add_ca({gst: "1000"})
     row = database.session.query(CaService).filter_by(service_id=dropped.id).one()
     database.session.delete(row)  # the CA stopped offering GSTR-1
     database.session.commit()
@@ -114,12 +111,8 @@ def test_lists_offered_services_in_catalog_order_with_ranges(
     assert unused.code not in [s["code"] for s in services]
     gst_row = services[1]
     assert gst_row["price"] == "650.00"
-    assert (gst_row["min_price"], gst_row["median_price"], gst_row["max_price"]) == (
-        "600.00",
-        "650.00",
-        "1000.00",
-    )
-    assert services[0]["median_price"] is None  # only one CA offers ITR
+    assert services[0]["price"] == "1500.00"
+    assert "median_price" not in gst_row  # no typical fees any more
 
 
 @pytest.mark.parametrize(

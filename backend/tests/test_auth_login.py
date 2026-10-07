@@ -28,7 +28,7 @@ def test_login_success_returns_token_and_user(client, make_user):
     claims = decode_token(body["access_token"])
     assert claims["sub"] == str(user.id)
     assert claims["role"] == "ca"
-    assert claims["exp"] > claims["iat"]
+    assert "exp" not in claims  # the token never expires
 
 
 def test_login_email_is_trimmed_and_case_insensitive(client, make_user):

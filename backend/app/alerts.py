@@ -1,4 +1,4 @@
-"""Alerts: the notification tray and bell, the daily deadline reminders and the penalty
+"""Alerts: the notification list, the daily deadline reminders and the penalty
 estimate.
 
 Tray entries are always created. Emails go out only when the user's `email_notifications`
@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import click
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import or_, select
 
 from app import compliance, marketplace, onboarding
 from app.models import (
@@ -349,13 +349,6 @@ def list_notifications():
     )
 
 
-@bp.get("/alerts/notifications/unread-count")
-@login_required
-def unread_count():
-    unread = my_tray().where(Notification.read_at.is_(None)).subquery()
-    return jsonify({"unread": db.session.scalar(select(func.count()).select_from(unread))})
-
-
 @bp.post("/alerts/notifications/<uuid:notification_id>/read")
 @login_required
 def mark_read(notification_id):
@@ -367,18 +360,6 @@ def mark_read(notification_id):
         notification.read_at = utcnow()
     db.session.commit()
     return jsonify(notification_to_dict(notification))
-
-
-@bp.post("/alerts/notifications/read-all")
-@login_required
-def mark_all_read():
-    db.session.execute(
-        update(Notification)
-        .where(Notification.user_id == current_user().id, Notification.read_at.is_(None))
-        .values(read_at=utcnow())
-    )
-    db.session.commit()
-    return jsonify({"unread": 0})
 
 
 @bp.get("/alerts/penalties")

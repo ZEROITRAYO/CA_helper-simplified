@@ -4,6 +4,24 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-07: No typical fees, an inbox instead of the bell, logins that never expire
+
+**What**
+- **Typical fees are gone:** the "Typical fees" page, the typical range and median next to prices (Find a CA, the
+  CA's page, the CA's "Services & prices") and the min / median / max in `GET /marketplace/services`. Businesses
+  see only each CA's own fixed fee. No table changed: the range was always computed, never stored.
+- **The notification bell is gone**, with "Mark all read" and the `unread-count` and `read-all` endpoints. The
+  notifications are now an inbox on the Notification settings page (business and CA; admins get none): newest
+  first, unread ones in bold. Clicking one opens it in a window like an email and marks it read; it no longer
+  jumps to another page.
+- **Logins never expire:** `JWT_ACCESS_TOKEN_EXPIRES = False`, and the token stays in localStorage until the user
+  logs out or clears the browser's data. `JWT_ACCESS_TOKEN_MINUTES` is no longer read. A deleted or deactivated
+  account is still logged out (401 `ACCOUNT_INACTIVE`).
+
+**Why:** asked for by the team: fewer numbers to explain, one place to read notifications, and no surprise logouts.
+A token that never expires cannot be revoked except by deleting the account or changing `JWT_SECRET_KEY`; fine
+for this prototype.
+
 ## 2026-10-07: Pro bono and CA quotes are removed; a CA's fee is fixed
 
 **What**

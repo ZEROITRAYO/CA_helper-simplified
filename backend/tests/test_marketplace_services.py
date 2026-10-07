@@ -1,6 +1,6 @@
-"""The service catalog, CA price menus and the typical price range (MA5, MA6).
+"""The service catalog and CA price menus.
 
-GET /api/v1/marketplace/services       catalog + min / median / max price
+GET /api/v1/marketplace/services       the catalog
 GET /api/v1/marketplace/ca-services    the CA's own price menu
 PUT /api/v1/marketplace/ca-services    replace it
 GET /api/v1/marketplace/cas?service=   CAs offering a service, with their price
@@ -81,13 +81,7 @@ def add_ca(make_user, database):
     return _add_ca
 
 
-def get_services(client, headers):
-    response = client.get(SERVICES_URL, headers=headers)
-    assert response.status_code == 200
-    return {row["code"]: row for row in response.get_json()}
-
-
-# --- Catalog and typical price range -----------------------------------------------
+# --- Catalog -----------------------------------------------
 
 
 @pytest.mark.parametrize("role", list(UserRole))
@@ -99,58 +93,6 @@ def test_every_role_sees_the_active_catalog_in_order(
     assert response.status_code == 200
     assert [row["code"] for row in response.get_json()] == ["itr_business", "gstr_3b"]
     assert response.get_json()[0]["unit"] == "per_return"
-
-
-def test_range_needs_three_cas(client, make_user, auth_headers, catalog, add_ca):
-    gst = catalog["gstr_3b"]
-    add_ca({gst: "500"})
-    add_ca({gst: "900"})
-    headers = auth_headers(make_user())
-
-    row = get_services(client, headers)["gstr_3b"]
-    assert row["ca_count"] == 2
-    assert row["min_price"] is None
-    assert row["median_price"] is None
-
-    add_ca({gst: "700"})
-    row = get_services(client, headers)["gstr_3b"]
-    assert row["ca_count"] == 3
-    assert (row["min_price"], row["median_price"], row["max_price"]) == (
-        "500.00",
-        "700.00",
-        "900.00",
-    )
-
-
-def test_median_of_an_even_count_is_the_middle_two_averaged(
-    client, make_user, auth_headers, catalog, add_ca
-):
-    gst = catalog["gstr_3b"]
-    for price in ["400", "500", "900", "5000"]:
-        add_ca({gst: price})
-
-    row = get_services(client, auth_headers(make_user()))["gstr_3b"]
-
-    assert row["median_price"] == "700.00"  # (500 + 900) / 2, not pulled up by 5000
-
-
-def test_range_counts_only_listed_cas_and_current_prices(
-    client, make_user, auth_headers, catalog, add_ca, database
-):
-    gst = catalog["gstr_3b"]
-    for price in ["500", "600", "700"]:
-        add_ca({gst: price})
-    add_ca({gst: "1"}, status=CaVerificationStatus.PENDING)
-    add_ca({gst: "1"}, status=CaVerificationStatus.REJECTED)
-    dropped = add_ca({gst: "1"})
-    row = database.session.query(CaService).join(CaProfile).filter_by(user_id=dropped.id).one()
-    database.session.delete(row)
-    database.session.commit()
-
-    row = get_services(client, auth_headers(make_user()))["gstr_3b"]
-
-    assert row["ca_count"] == 3
-    assert row["min_price"] == "500.00"
 
 
 def test_catalog_requires_login(client, database):

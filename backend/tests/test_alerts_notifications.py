@@ -102,11 +102,9 @@ def test_the_tray_shows_only_own_entries(client, make_user, auth_headers, databa
     data = client.get(f"{BASE}/notifications", headers=auth_headers(me)).get_json()
 
     assert data["total"] == 1
-    count = client.get(f"{BASE}/notifications/unread-count", headers=auth_headers(me))
-    assert count.get_json() == {"unread": 1}
 
 
-def test_mark_one_read_then_all(client, make_user, auth_headers, database):
+def test_mark_one_read(client, make_user, auth_headers, database):
     user = make_user()
     add_notifications(user, 3)
     headers = auth_headers(user)
@@ -116,15 +114,8 @@ def test_mark_one_read_then_all(client, make_user, auth_headers, database):
 
     assert response.status_code == 200
     assert response.get_json()["read_at"] is not None
-    assert client.get(f"{BASE}/notifications/unread-count", headers=headers).get_json() == {
-        "unread": 2
-    }
-    assert client.post(f"{BASE}/notifications/read-all", headers=headers).get_json() == {
-        "unread": 0
-    }
-    assert client.get(f"{BASE}/notifications/unread-count", headers=headers).get_json() == {
-        "unread": 0
-    }
+    items = client.get(f"{BASE}/notifications", headers=headers).get_json()["items"]
+    assert [item["read_at"] is None for item in items] == [False, True, True]
 
 
 def test_nobody_can_mark_another_users_entry(client, make_user, auth_headers, database):
@@ -136,21 +127,12 @@ def test_nobody_can_mark_another_users_entry(client, make_user, auth_headers, da
 
     assert response.status_code == 404
     assert response.get_json()["error"]["code"] == "NOTIFICATION_NOT_FOUND"
-    client.post(f"{BASE}/notifications/read-all", headers=auth_headers(other))
     database.session.expire_all()
     assert database.session.get(Notification, note.id).read_at is None
 
 
-@pytest.mark.parametrize(
-    "method, url",
-    [
-        ("get", "/notifications"),
-        ("get", "/notifications/unread-count"),
-        ("post", "/notifications/read-all"),
-    ],
-)
-def test_the_tray_needs_a_login(client, database, method, url):
-    assert getattr(client, method)(f"{BASE}{url}").status_code == 401
+def test_the_tray_needs_a_login(client, database):
+    assert client.get(f"{BASE}/notifications").status_code == 401
 
 
 # --- The email switch (AL3) ---------------------------------------------------------------

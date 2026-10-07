@@ -1,7 +1,6 @@
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router";
 
 import { useAuth } from "@/auth";
-import { NotificationBell } from "@/components/shared";
 import { Button, buttonClass } from "@/components/ui";
 import { cn, ROLE_HOME, USER_ROLE_LABELS } from "@/lib";
 import {
@@ -31,7 +30,6 @@ import {
   CaDetailPage,
   MarketplacePage,
   RequestCaPage,
-  TypicalFeesPage,
 } from "@/pages/business/FindCaPage";
 import { OnboardingPage } from "@/pages/business/OnboardingPage";
 import { RegulatoryUpdatesPage } from "@/pages/business/RegulatoryUpdatesPage";
@@ -52,7 +50,6 @@ export const NAV = {
     { label: "Compliance calendar", path: "/business/compliance" },
     { label: "Document vault", path: "/business/documents" },
     { label: "Find a CA", path: "/business/marketplace" },
-    { label: "Typical fees", path: "/business/fees" },
     { label: "My engagements", path: "/business/engagements" },
     { label: "Regulatory updates", path: "/business/updates" },
     { label: "Notification settings", path: "/business/settings" },
@@ -111,7 +108,6 @@ export const appRoutes = [
     { path: "marketplace/:caId", element: <CaDetailPage /> },
     { path: "marketplace/:caId/request", element: <RequestCaPage /> },
     { path: "engagements", element: <MyEngagementsPage /> },
-    { path: "fees", element: <TypicalFeesPage /> },
     { path: "updates", element: <RegulatoryUpdatesPage /> },
     { path: "settings", element: <SettingsPage /> },
   ]),
@@ -146,14 +142,11 @@ export function AppShell({ role, nav }) {
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r bg-muted/40 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <Link to={home} className="text-lg font-semibold">
-              CA Helper
-            </Link>
-            <p className="text-xs text-muted-foreground">{title}</p>
-          </div>
-          <NotificationBell />
+        <div>
+          <Link to={home} className="text-lg font-semibold">
+            CA Helper
+          </Link>
+          <p className="text-xs text-muted-foreground">{title}</p>
         </div>
         <nav
           className="mt-6 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto"

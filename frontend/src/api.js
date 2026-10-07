@@ -430,36 +430,19 @@ export async function downloadDocument(document) {
 
 // --- alerts ------------------------------------------------------------------------------------
 
-// Everything of the tray in the query cache; refreshed after marking entries read.
+// Every notification page in the query cache; refreshed after one is read.
 export const NOTIFICATIONS_KEY = ["alerts", "notifications"];
 
-// How often the bell asks for new notifications while a page is open.
-const UNREAD_REFRESH_MS = 60_000;
-
-// { unread } for the bell.
-export function useUnreadCount() {
+// One page of my notifications, newest first: { items, page, page_size, total }.
+export function useNotifications(page) {
   return useQuery({
-    queryKey: [...NOTIFICATIONS_KEY, "unread-count"],
-    queryFn: () => apiFetch("/api/v1/alerts/notifications/unread-count"),
-    refetchInterval: UNREAD_REFRESH_MS,
-  });
-}
-
-// The latest tray entries { items, page, page_size, total }, loaded when the tray opens.
-export function useNotifications(enabled, pageSize = 10) {
-  return useQuery({
-    queryKey: [...NOTIFICATIONS_KEY, "list", pageSize],
-    queryFn: () => apiFetch(`/api/v1/alerts/notifications?page_size=${pageSize}`),
-    enabled,
+    queryKey: [...NOTIFICATIONS_KEY, page],
+    queryFn: () => apiFetch(`/api/v1/alerts/notifications?page=${page}`),
   });
 }
 
 export function markNotificationRead(notificationId) {
   return apiFetch(`/api/v1/alerts/notifications/${notificationId}/read`, { method: "POST" });
-}
-
-export function markAllNotificationsRead() {
-  return apiFetch("/api/v1/alerts/notifications/read-all", { method: "POST" });
 }
 
 // --- Penalty estimates ---------------------------------------------------------------------
@@ -542,7 +525,7 @@ export function useVerifiedCas(filters) {
 }
 
 // One verified CA's page: details plus the services they offer, each with the CA's
-// price and the typical range. A CA businesses may not see answers 404 CA_NOT_FOUND.
+// fixed price. A CA businesses may not see answers 404 CA_NOT_FOUND.
 export function useVerifiedCa(caId) {
   return useQuery({
     queryKey: ["marketplace", "ca", caId],
@@ -550,8 +533,7 @@ export function useVerifiedCa(caId) {
   });
 }
 
-// Every catalog service with its typical price range (min / median / max).
-// Used by the "Services & prices", "Find a CA" and "Typical fees" pages.
+// Every catalog service. Used by the "Services & prices" and "Find a CA" pages.
 export function useServices() {
   return useQuery({
     queryKey: ["marketplace", "services"],

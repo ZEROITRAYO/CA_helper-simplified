@@ -74,7 +74,7 @@ describe("Find a CA page", () => {
     expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
   });
 
-  it("shows the typical fee and each CA's price for the chosen service", async () => {
+  it("shows each CA's price for the chosen service", async () => {
     loginAs("business");
     fakeApi({
       "GET /api/v1/marketplace/services": [
@@ -86,10 +86,6 @@ describe("Find a CA page", () => {
             name: "GSTR-3B filing",
             description: "Summary GST return.",
             unit: "per_return",
-            ca_count: 3,
-            min_price: "600.00",
-            median_price: "700.00",
-            max_price: "1000.00",
           },
         ],
       ],
@@ -97,10 +93,7 @@ describe("Find a CA page", () => {
     });
     renderApp("/business/marketplace?service=gstr_3b");
 
-    expect(await screen.findByText("₹650 per return · Below the median")).toBeInTheDocument();
-    expect(
-      screen.getByText("₹600 – ₹1,000, median ₹700 (3 CAs) · per return", { exact: false }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("₹650 per return")).toBeInTheDocument();
     expect(screen.getByLabelText("Service")).toHaveValue("gstr_3b");
   });
 

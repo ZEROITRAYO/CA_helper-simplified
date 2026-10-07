@@ -75,7 +75,7 @@ Column types are in `models.py`; this lists what each table is for and its key f
 | Table | One row is... | Key fields |
 |---|---|---|
 | `ca_profiles` | a CA's practice profile | user_id → users (unique), membership_no (6 digits, unique), cop_number, city, languages and specializations (`varchar[]`, GIN index on specializations), capacity (most active clients at once), years_experience, about, verification_status, rejection_reason, verified_at, verified_by_id → users, cop_document_id → documents |
-| `service_catalog` | a standard service every CA prices against | code (unique, e.g. `gstr_3b`), name, description, unit, sort_order, form_code (null for services that are not one filing, e.g. tax audit). Class `CatalogService`. Typical prices are computed from `ca_services`, never stored |
+| `service_catalog` | a standard service every CA prices against | code (unique, e.g. `gstr_3b`), name, description, unit, sort_order, form_code (null for services that are not one filing, e.g. tax audit). Class `CatalogService`. |
 | `ca_services` | one CA's price for one catalog service (N–N) | ca_profile_id, service_id, price (> 0). Unique (ca_profile_id, service_id). Unticking a service deletes the row |
 | `engagements` | one business working with one CA | business_id, ca_profile_id, status, requested_at, responded_at, expires_at (48 hours after the request), activated_at, completed_at. A business may have several CAs at once |
 | `engagement_items` | one filing in an engagement | engagement_id, compliance_item_id, service_id → service_catalog, listed_price (the CA's fixed price when requested), agreed_price (the same, set when the CA accepts). Unique (engagement, item) |

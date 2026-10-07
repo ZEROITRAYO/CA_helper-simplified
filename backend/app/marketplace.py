@@ -14,7 +14,6 @@ or any save of a rejected profile sends it back to `pending`. Only verified CAs 
 
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
-from statistics import median
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, select
@@ -61,8 +60,6 @@ bp = Blueprint("marketplace", __name__)
 
 # Changing one of these needs a new admin check.
 IDENTITY_FIELDS = ("membership_no", "cop_number")
-# The typical price range of a service is shown once this many CAs offer it.
-MIN_CAS_FOR_RANGE = 3
 MAX_PRICE = Decimal(1000000)  # rupees; a higher price is almost certainly a typing mistake
 # An engagement in one of these still holds its filings: nobody may request them again.
 OPEN_STATUSES = [EngagementStatus.REQUESTED, EngagementStatus.ACTIVE]
@@ -350,35 +347,19 @@ def rating_summary(ca_profile_id):
 
 
 def list_catalog():
-    """Every catalog service with its typical (min, median, max) price."""
-    prices = {}  # service id -> [prices of verified CAs]
-    stmt = select(CaService.service_id, CaService.price).join(
-        CaProfile, CaService.ca_profile_id == CaProfile.id
-    )
-    stmt = stmt.where(CaProfile.verification_status == CaVerificationStatus.VERIFIED)
-    for service_id, price in db.session.execute(stmt):
-        prices.setdefault(service_id, []).append(price)
-
+    """Every catalog service, in catalog order."""
     result = []
     for service in db.session.scalars(select(CatalogService).order_by(CatalogService.sort_order)):
-        service_prices = prices.get(service.id, [])
-        row = {
-            "id": str(service.id),
-            "code": service.code,
-            "name": service.name,
-            "description": service.description,
-            "unit": service.unit,
-            "specialization": SERVICE_SPECIALIZATIONS.get(service.code),
-            "ca_count": len(service_prices),
-            "min_price": None,
-            "median_price": None,
-            "max_price": None,
-        }
-        if len(service_prices) >= MIN_CAS_FOR_RANGE:
-            row["min_price"] = money(min(service_prices))
-            row["median_price"] = money(median(service_prices))
-            row["max_price"] = money(max(service_prices))
-        result.append(row)
+        result.append(
+            {
+                "id": str(service.id),
+                "code": service.code,
+                "name": service.name,
+                "description": service.description,
+                "unit": service.unit,
+                "specialization": SERVICE_SPECIALIZATIONS.get(service.code),
+            }
+        )
     return result
 
 

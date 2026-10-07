@@ -174,39 +174,6 @@ export function formatRupees(amount) {
   );
 }
 
-// The typical price range of a catalog service (GET /api/v1/marketplace/services),
-// e.g. "₹600 – ₹1,000, median ₹700 (3 CAs)". The API sends no range until
-// enough CAs offer the service.
-export function typicalRangeText(service) {
-  if (service.median_price === null) {
-    return "Not enough data yet";
-  }
-  return (
-    formatRupees(service.min_price) +
-    " – " +
-    formatRupees(service.max_price) +
-    ", median " +
-    formatRupees(service.median_price) +
-    " (" +
-    service.ca_count +
-    " CAs)"
-  );
-}
-
-// Where a price sits against the median of all CAs, or null if there is no median yet.
-export function comparedToMedian(price, median) {
-  if (median === null || median === undefined) {
-    return null;
-  }
-  if (Number(price) < Number(median)) {
-    return "Below the median";
-  }
-  if (Number(price) > Number(median)) {
-    return "Above the median";
-  }
-  return "At the median";
-}
-
 // --- dates -------------------------------------------------------------------------------------
 
 /** Dates in Indian time: formatDate("2026-09-20") -> "20 Sept 2026". */

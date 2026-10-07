@@ -10,7 +10,7 @@ A role whose variables are empty is skipped with a warning. The demo CA gets a
 verified practice profile, and four sample CAs (sample-ca-N@demo.local, random
 passwords nobody knows, so they cannot log in) fill the marketplace list. The
 service catalog is seeded here too (an admin editor comes later), and the four
-sample CAs get prices so some typical price ranges show up. The legal rule
+sample CAs get prices, so Find a CA shows fees. The legal rule
 thresholds, the obligation templates and the penalty rules of the 7 forms are seeded too,
 each with its official source; the values not confirmed yet are marked TODO_VERIFY
 (docs/TODO_VERIFY.md). These three seeds also update rows seeded earlier, so a corrected
@@ -281,7 +281,7 @@ SERVICE_CATALOG = [
 ]
 
 # Sample prices (rupees) of the sample CAs, by email and service code. Made up for
-# development, so some typical price ranges have data. The demo CA gets no prices:
+# development, so Find a CA shows fees. The demo CA gets no prices:
 # set them yourself on /ca/services.
 SAMPLE_PRICES = {
     "sample-ca-1@demo.local": {

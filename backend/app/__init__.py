@@ -13,7 +13,6 @@ file per feature (auth.py, compliance.py, ...), seed.py and demo_seed.py.
 
 import logging
 import os
-from datetime import timedelta
 
 from flask import Blueprint, Flask, jsonify, redirect
 from flask_jwt_extended import JWTManager
@@ -45,8 +44,9 @@ log = logging.getLogger(__name__)
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
-    # Access tokens only (no refresh token); lifetime in minutes.
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=int(os.environ.get("JWT_ACCESS_TOKEN_MINUTES", "60")))
+    # Access tokens never expire: a user stays logged in until they log out
+    # (or clear the browser's data).
+    JWT_ACCESS_TOKEN_EXPIRES = False
 
     # Fernet key for the encrypted columns and files (EncryptedString in app/models.py).
     FIELD_ENCRYPTION_KEY = os.environ.get("FIELD_ENCRYPTION_KEY")
