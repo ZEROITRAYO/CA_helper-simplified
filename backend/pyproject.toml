@@ -1,0 +1,7 @@
+# pytest configuration for the backend. Dependencies live in requirements.txt.
+
+[tool.pytest.ini_options]
+# All tests live in tests/ (shared fixtures: tests/conftest.py).
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"

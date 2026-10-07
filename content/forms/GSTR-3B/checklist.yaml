@@ -1,0 +1,35 @@
+# Document checklist for GSTR-3B.
+# Status: DONE (reviewed on 29 Sep 2026 against the official pages in explanation.md).
+#
+# Used by: the checklist on the filing page (and OCR document-type checks later).
+# Each item:
+#   key       stable snake_case id (never rename once used; ticks are stored against it)
+#   label     text shown to the user
+#   required  true if a CA normally cannot file without it
+#   help      optional one-line hint
+form: GSTR-3B
+status: DONE
+items:
+  - key: sales_summary
+    label: "Sales summary of the period (same as in GSTR-1)"
+    required: true
+    help: "File GSTR-1 first if it is due"
+  - key: purchase_invoices
+    label: "Purchase invoices with GST"
+    required: true
+    help: "For the tax credit you claim"
+  - key: gstr_2b
+    label: "GSTR-2B statement from the portal"
+    required: true
+    help: "Returns Dashboard → GSTR-2B"
+  - key: reverse_charge_details
+    label: "Purchases under reverse charge"
+    required: false
+    help: "Only if you have any"
+  - key: tax_payment_funds
+    label: "Money in the bank to pay the GST due"
+    required: true
+  - key: gst_portal_login
+    label: "GST portal username and password"
+    required: true
+    help: "And the registered mobile for the OTP"

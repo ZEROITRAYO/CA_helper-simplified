@@ -1,0 +1,208 @@
+"""Shared pytest fixtures for all backend tests (pytest loads this file automatically).
+
+Fixtures:
+    app       Flask app built with TEST_CONFIG (one per test session)
+    client    Flask test client for calling the API
+    database  test database with every table created (once per session). Every
+              row is deleted after each test, so tests never see each other's
+              data. Request it in any test that touches the DB.
+    make_user    factory: make_user(role=UserRole.CA, full_name="Asha") -> User (needs `database`);
+                 the user's email is verified unless you pass email_verified_at=None
+    auth_headers auth_headers(user) -> {"Authorization": "Bearer <access token>"}
+    mailbox      emails "sent" during the test (list of EmailMessage); emptied before each test
+    legal_rules  the seeded rule thresholds and obligation templates (app/seed.py), committed
+    business_with_filings
+                 a registered QRMP business (no TDS) with this year's filings, created on
+                 27 Sep 2026; its owner is `database.session.get(User, business.user_id)`
+
+The test database (TEST_DATABASE_URL, default `ca_helper_test`) is created
+automatically if it does not exist, in the `db` container of docker-compose.yml.
+"""
+
+import os
+import re
+from datetime import date, timedelta
+
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
+
+from app import create_app
+from app.auth import issue_access_token
+from app.compliance import create_filings
+from app.models import (
+    Business,
+    db as _db,
+    EntityType,
+    GstScheme,
+    RegulatoryProfile,
+    User,
+    UserRole,
+    utcnow,
+)
+from app.seed import seed_obligation_templates, seed_rule_thresholds
+from app.utils import hash_password, outbox
+
+TEST_PASSWORD = "Correct-Horse-9"
+
+# Settings the tests replace, so a developer's .env cannot change test behaviour.
+TEST_CONFIG = {
+    "TESTING": True,
+    "SECRET_KEY": "test-secret-key",
+    "JWT_SECRET_KEY": "test-jwt-secret-key-that-is-long-enough",
+    "JWT_ACCESS_TOKEN_EXPIRES": timedelta(minutes=60),
+    "SQLALCHEMY_DATABASE_URI": os.environ.get("TEST_DATABASE_URL"),
+    "FIELD_ENCRYPTION_KEY": "Z5radg25qAqquvqRiPO960hRLtJmVhE0P3dYa_T1Mk8=",
+    # Tests read emails from app.utils.outbox; nothing reaches Mailpit.
+    "MAIL_SUPPRESS_SEND": True,
+    "LOG_LEVEL": "INFO",
+    # Tests never call the real Gemini: without a key the client refuses (tests fake it).
+    "GEMINI_API_KEY": None,
+}
+
+
+def emailed_code(message) -> str:
+    """The 6-digit code in an email sent by auth_service."""
+    return re.search(r"\b([0-9]{6})\b", message.get_content()).group(1)
+
+
+@pytest.fixture(scope="session")
+def app():
+    app = create_app(TEST_CONFIG)
+    with app.app_context():
+        yield app
+
+
+@pytest.fixture()
+def client(app):
+    return app.test_client()
+
+
+def _create_database_if_missing(url: str) -> None:
+    """Connect to the server's `postgres` database and CREATE the test database if needed."""
+    target = make_url(url)
+    engine = create_engine(target.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": target.database}
+            ).scalar()
+            if not exists:
+                conn.execute(text(f'CREATE DATABASE "{target.database}"'))
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def _schema(app):
+    url = app.config["SQLALCHEMY_DATABASE_URI"]
+    if not url:
+        pytest.fail("TEST_DATABASE_URL is not set (docker-compose.yml sets it).")
+    if url == os.environ.get("DATABASE_URL"):
+        pytest.fail("TEST_DATABASE_URL is the app's database: the tests would wipe it.")
+    try:
+        _create_database_if_missing(url)
+    except OperationalError as exc:
+        safe_url = make_url(url).render_as_string(hide_password=True)
+        pytest.fail(
+            f"Cannot reach the test database at {safe_url}. Is `docker compose up` running?\n{exc}"
+        )
+
+    _db.create_all()
+    yield _db
+    _db.session.remove()
+    _db.drop_all()
+
+
+@pytest.fixture()
+def database(_schema):
+    yield _schema
+    # Services really commit, so empty every table after the test. Children go
+    # before parents (reverse foreign-key order), so no foreign key blocks a delete.
+    _schema.session.rollback()  # drop anything the test left uncommitted
+    for table in reversed(_schema.metadata.sorted_tables):
+        _schema.session.execute(table.delete())
+    _schema.session.commit()
+
+
+@pytest.fixture(autouse=True)
+def mailbox():
+    """TEST_CONFIG suppresses sending; app.utils.outbox collects the messages."""
+    outbox.clear()
+    return outbox
+
+
+@pytest.fixture()
+def make_user(database):
+    """Create and commit a user; the password is always TEST_PASSWORD."""
+    counter = iter(range(1, 10_000))
+
+    def _make_user(
+        role: UserRole = UserRole.BUSINESS,
+        email: str | None = None,
+        full_name: str = "Test User",
+        **fields,
+    ) -> User:
+        fields.setdefault("password_hash", hash_password(TEST_PASSWORD))
+        fields.setdefault("email_verified_at", utcnow())
+        user = User(
+            email=email or f"user{next(counter)}@example.com",
+            full_name=full_name,
+            role=role,
+            **fields,
+        )
+        database.session.add(user)
+        database.session.commit()
+        return user
+
+    return _make_user
+
+
+@pytest.fixture()
+def auth_headers(app):
+    """Build an Authorization header with a real access token for a user."""
+
+    def _auth_headers(user: User) -> dict[str, str]:
+        return {"Authorization": f"Bearer {issue_access_token(user)}"}
+
+    return _auth_headers
+
+
+@pytest.fixture()
+def legal_rules(database):
+    """The rule thresholds and obligation templates from app/seed.py, as after `flask seed`."""
+    seed_rule_thresholds()
+    seed_obligation_templates()
+    database.session.commit()
+
+
+@pytest.fixture()
+def business_with_filings(make_user, legal_rules, database):
+    """A QRMP business (GSTR-1, GSTR-3B quarterly, ITR; no TDS) with this year's filings,
+    made on 27 Sep 2026. Q1 is due in July (overdue), Q2's GSTR-1 on 13 Oct 2026."""
+    owner = make_user(role=UserRole.BUSINESS, full_name="Asha Rao")
+    business = Business(
+        user_id=owner.id,
+        legal_name="Asha Traders",
+        entity_type=EntityType.PROPRIETORSHIP,
+        state="Maharashtra",
+        address="Pune",
+        description="Retail shop",
+        annual_turnover=4_500_000,
+        investment_amount=800_000,
+        pan="ABCDE1234F",
+        phone="9876543210",
+        gst_registered=True,
+        gstin="27ABCDE1234F1Z5",
+        deducts_tds=False,
+        pays_salary_above_limit=False,
+    )
+    database.session.add(business)
+    database.session.commit()
+    profile = RegulatoryProfile(
+        gst_scheme=GstScheme.REGULAR_QRMP, audit_applicable=False, files_24q=False, files_26q=False
+    )
+    create_filings(business.id, profile, date(2026, 9, 27))
+    database.session.commit()
+    return business
