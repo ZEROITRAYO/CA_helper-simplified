@@ -32,10 +32,9 @@ Tax audit applicability is computed in the profile (it changes the ITR due date)
    investment in plant/machinery/equipment, PAN, "GST registered?". Conditional: GSTIN (if GST registered),
    TAN / "deducts TDS?", "pays salaries above the taxable limit?", CIN/LLPIN (company/LLP). Optional: Udyam number.
    Email OTP verification. Optional OCR auto-fill from an uploaded GST certificate or PAN.
-2. **Profile review.** NIC activity code: keyword-shortlist real codes from the official NIC list, Gemini picks from
-   the shortlist (never invents a code), user confirms. Regulatory profile with a "why" for every line: MSME tier,
-   GST scheme (regular/QRMP/composition), ITR form, presumptive-scheme eligibility, tax audit applicability, TDS
-   returns. Edit and re-check.
+2. **Profile review.** NIC activity code: the business searches the official NIC list and confirms a code (no
+   suggestions). A summary of the computed profile (MSME tier, GST scheme, ITR form, audit, TDS returns) with a
+   link to the compliance calendar; edit and re-check.
 3. **Home dashboard:** next deadline, due/overdue counts, dynamic penalty estimator, notification tray.
 4. **Compliance calendar:** month and list views.
 5. **Compliance item page.** Plain-language explanation. Peer insights: % self-filed vs % via CA and the on-time rate

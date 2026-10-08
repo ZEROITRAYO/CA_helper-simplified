@@ -12,7 +12,6 @@ import {
   readRegistrationDocument,
   registerBusiness,
   saveNicCode,
-  suggestNicCodes,
   updateBusiness,
   useGstStates,
   useMyBusiness,
@@ -380,7 +379,7 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
           <FormField
             id="description"
             label="What does the business do?"
-            hint="In your own words, e.g. 'We bake biscuits and cakes'. It is used to suggest your activity code, so leave out names, phone numbers and emails."
+            hint="In your own words, e.g. 'We bake biscuits and cakes'."
             error={errors.description}
             {...register("description")}
           />
@@ -623,13 +622,18 @@ function ProfileView({ business, profile, nicCode, onEdit }) {
             {label(ENTITY_TYPE_LABELS, business.entity_type)} · {business.state} · turnover{" "}
             {formatRupees(business.annual_turnover)}
           </CardDescription>
-          <ul className="flex flex-wrap gap-2 pt-1" aria-label="Profile summary">
-            {summaryChips(profile).map((chip) => (
-              <li key={chip}>
-                <Badge variant="secondary">{chip}</Badge>
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
+            <ul className="flex flex-wrap gap-2" aria-label="Profile summary">
+              {summaryChips(profile).map((chip) => (
+                <li key={chip}>
+                  <Badge variant="secondary">{chip}</Badge>
+                </li>
+              ))}
+            </ul>
+            <Link to="/business/compliance" className="text-sm underline">
+              See your filings in the compliance calendar
+            </Link>
+          </div>
           <div className="pt-2">
             <Button variant="outline" size="sm" onClick={onEdit}>
               Edit details
@@ -652,35 +656,8 @@ function ProfileView({ business, profile, nicCode, onEdit }) {
         <p className="rounded-lg bg-muted p-3 text-sm">{profile.explanations.roc_not_tracked}</p>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your regulatory profile</CardTitle>
-          <CardDescription>What applies to your business. Open a line to see why.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="divide-y">
-            {LINES.map(([key, title, show]) => (
-              <details key={key} className="py-3">
-                <summary className="flex cursor-pointer justify-between gap-4 text-sm">
-                  <span className="font-medium">{title}</span>
-                  <span className="font-semibold">{show(profile[key])}</span>
-                </summary>
-                <p className="pt-1 text-sm text-muted-foreground">{profile.explanations[key]}</p>
-              </details>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
       <NicCodeCard nicCode={nicCode} />
 
-      <p className="text-sm">
-        Your filings are in the{" "}
-        <Link to="/business/compliance" className="underline">
-          compliance calendar
-        </Link>
-        .
-      </p>
       <p className="text-xs text-muted-foreground">
         The legal limits behind this profile are still being verified. Check with a CA before
         relying on it.
@@ -739,32 +716,15 @@ function WhatChanged({ changes }) {
 
 // --- NicCodeCard -------------------------------------------------------------------------------
 
-/** The business's NIC code: suggestions or a search, saved only after Confirm. */
+/** The business's NIC code: found with a search, saved only after Confirm. */
 export function NicCodeCard({ nicCode }) {
   const queryClient = useQueryClient();
-  const [suggestion, setSuggestion] = useState(null); // {picks, shortlist, ai_used}
   const [search, setSearch] = useState("");
   const [chosen, setChosen] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
   const results = useNicSearch(search);
-
-  async function onSuggest() {
-    setError(null);
-    setSaved(false);
-    setBusy(true);
-    try {
-      const answer = await suggestNicCodes();
-      setSuggestion(answer);
-      if (answer.picks.length > 0) {
-        setChosen(answer.picks[0].code);
-      }
-    } catch (problem) {
-      setError(errorMessage(problem));
-    }
-    setBusy(false);
-  }
 
   async function onConfirm() {
     setError(null);
@@ -776,7 +736,6 @@ export function NicCodeCard({ nicCode }) {
       if (cached) {
         queryClient.setQueryData(MY_BUSINESS_KEY, { ...cached, nic_code: code });
       }
-      setSuggestion(null);
       setSearch("");
       setChosen("");
       setSaved(true);
@@ -817,39 +776,8 @@ export function NicCodeCard({ nicCode }) {
           </p>
         )}
 
-        <Button type="button" variant="outline" size="sm" onClick={onSuggest} disabled={busy}>
-          {busy && !suggestion ? "Finding codes..." : "Suggest codes"}
-        </Button>
-
-        {suggestion && suggestion.picks.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No code matches your description. Search the list below.
-          </p>
-        )}
-        {suggestion && suggestion.picks.length > 0 && (
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Suggested codes</legend>
-            {!suggestion.ai_used && (
-              <p className="text-xs text-muted-foreground">
-                AI suggestions are not available right now; these are keyword matches.
-              </p>
-            )}
-            {suggestion.picks.map((pick) => (
-              <CodeOption
-                key={pick.code}
-                idPrefix="pick-"
-                nic={pick}
-                chosen={chosen}
-                onChoose={setChosen}
-                note={pick.reason}
-                badge={pick.source === "ai" ? "AI suggestion, please check" : "Keyword match"}
-              />
-            ))}
-          </fieldset>
-        )}
-
         <div className="space-y-2">
-          <Label htmlFor="nic-search">None of these? Search the list</Label>
+          <Label htmlFor="nic-search">Search the NIC list</Label>
           <Input
             id="nic-search"
             placeholder="e.g. bakery, tailoring or 10712"
@@ -860,13 +788,7 @@ export function NicCodeCard({ nicCode }) {
             <fieldset className="space-y-2">
               <legend className="sr-only">Search results</legend>
               {searchRows.map((nic) => (
-                <CodeOption
-                  key={nic.code}
-                  idPrefix="found-"
-                  nic={nic}
-                  chosen={chosen}
-                  onChoose={setChosen}
-                />
+                <CodeOption key={nic.code} nic={nic} chosen={chosen} onChoose={setChosen} />
               ))}
             </fieldset>
           )}
@@ -888,10 +810,9 @@ export function NicCodeCard({ nicCode }) {
   );
 }
 
-// One code as a radio button, with an optional reason and label.
-// `idPrefix` keeps ids unique when a code is both suggested and found by the search.
-function CodeOption({ idPrefix, nic, chosen, onChoose, note, badge }) {
-  const id = idPrefix + nic.code;
+// One code as a radio button.
+function CodeOption({ nic, chosen, onChoose }) {
+  const id = "nic-" + nic.code;
   return (
     <label htmlFor={id} className="flex items-start gap-2 rounded-lg border p-2 text-sm">
       <input
@@ -903,12 +824,8 @@ function CodeOption({ idPrefix, nic, chosen, onChoose, note, badge }) {
         onChange={() => onChoose(nic.code)}
         className="mt-1"
       />
-      <span className="space-y-1">
-        <span className="block">
-          <span className="font-semibold">{nic.code}</span> · {nic.description}
-        </span>
-        {note && <span className="block text-xs text-muted-foreground">{note}</span>}
-        {badge && <Badge variant="secondary">{badge}</Badge>}
+      <span>
+        <span className="font-semibold">{nic.code}</span> · {nic.description}
       </span>
     </label>
   );

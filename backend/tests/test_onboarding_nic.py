@@ -1,18 +1,11 @@
-"""NIC activity codes: the official list (ON9) and the suggestion + confirmation (ON10).
-
-Gemini is never really called: tests set a fake key and replace _send_to_gemini.
-"""
-
-import json
+"""NIC activity codes: the official list (ON9), the search and saving the chosen code (ON10)."""
 
 import pytest
 from sqlalchemy import func, select
 
-from app import onboarding as onboarding_service, utils as gemini_client
 from app.models import NicCode, User, UserRole
 from app.seed import seed_nic_codes
 
-SUGGEST_URL = "/api/v1/onboarding/nic-suggestions"
 SEARCH_URL = "/api/v1/onboarding/nic-codes"
 SAVE_URL = "/api/v1/onboarding/business/nic-code"
 
@@ -43,34 +36,6 @@ def bakery(business_with_filings, database):
     return business, database.session.get(User, business.user_id)
 
 
-@pytest.fixture()
-def fake_gemini(app, monkeypatch):
-    """Turn Gemini "on" with a fake that returns `reply` and records what it was sent."""
-    sent = []
-    state = {"reply": ""}
-
-    def fake_send(prompt, want_json):
-        sent.append(prompt)
-        return state["reply"]
-
-    monkeypatch.setitem(app.config, "GEMINI_API_KEY", "test-key")
-    monkeypatch.setattr(gemini_client, "_send_to_gemini", fake_send)
-
-    def answer_with(picks):
-        state["reply"] = json.dumps({"picks": picks})
-
-    answer_with.sent = sent
-    answer_with.state = state
-    return answer_with
-
-
-def codes_of(picks):
-    result = []
-    for pick in picks:
-        result.append((pick["code"], pick["source"]))
-    return result
-
-
 # --- ON9: the official list -------------------------------------------------------
 
 
@@ -97,110 +62,7 @@ def test_seed_twice_adds_nothing(database):
     assert database.session.scalar(select(func.count(NicCode.id))) == first
 
 
-# --- ON10: keyword shortlist ------------------------------------------------------
-
-
-def test_shortlist_ranks_by_matching_words(app, nic_codes):
-    with app.app_context():
-        shortlist = onboarding_service.shortlist_nic_codes("We make biscuits and cakes")
-
-    codes = []
-    for nic in shortlist:
-        codes.append(nic.code)
-    assert codes == ["10712"]  # "biscuit" and "cake" both match; plural "s" ignored
-
-
-def test_shortlist_ignores_common_words(app, nic_codes):
-    with app.app_context():
-        assert onboarding_service.shortlist_nic_codes("our business and other services") == []
-
-
-# --- ON10: suggestions ------------------------------------------------------------
-
-
-def test_gemini_picks_3_codes_from_the_shortlist(
-    client, bakery, nic_codes, auth_headers, fake_gemini
-):
-    business, owner = bakery
-    fake_gemini(
-        [
-            {"code": "10712", "reason": "They bake biscuits and cakes."},
-            {"code": "10719", "reason": "Other bakery products."},
-            {"code": "47214", "reason": "If they also sell bakery products."},
-        ]
-    )
-
-    response = client.post(SUGGEST_URL, headers=auth_headers(owner))
-
-    assert response.status_code == 200
-    body = response.get_json()
-    assert body["ai_used"] is True
-    assert codes_of(body["picks"]) == [("10712", "ai"), ("10719", "ai"), ("47214", "ai")]
-    assert body["picks"][0]["reason"] == "They bake biscuits and cakes."
-    assert body["picks"][0]["description"].startswith("Manufacture of biscuits")
-
-
-def test_an_invented_code_is_dropped_and_keywords_fill_the_gap(
-    client, bakery, nic_codes, auth_headers, fake_gemini
-):
-    business, owner = bakery
-    fake_gemini(
-        [
-            {"code": "99999", "reason": "Made up."},
-            {"code": "62011", "reason": "Real code, but not in the shortlist."},
-            {"code": "10712", "reason": "Biscuits and cakes."},
-            {"code": "10712", "reason": "Repeated."},
-        ]
-    )
-
-    body = client.post(SUGGEST_URL, headers=auth_headers(owner)).get_json()
-
-    codes = codes_of(body["picks"])
-    assert codes[0] == ("10712", "ai")
-    assert len(codes) <= 3
-    for code, source in codes[1:]:
-        assert source == "keywords"
-        assert code not in ("99999", "62011", "10712")
-
-
-def test_only_the_scrubbed_description_is_sent(
-    client, bakery, nic_codes, auth_headers, fake_gemini
-):
-    business, owner = bakery
-    fake_gemini([{"code": "10712", "reason": "Biscuits."}])
-
-    client.post(SUGGEST_URL, headers=auth_headers(owner))
-
-    prompt = fake_gemini.sent[0]
-    assert "[EMAIL]" in prompt
-    assert "asha@example.com" not in prompt
-    assert "Asha Traders" not in prompt  # the business name is never sent
-    assert business.pan not in prompt
-
-
-def test_a_reply_that_is_not_json_falls_back_to_keywords(
-    client, bakery, nic_codes, auth_headers, fake_gemini
-):
-    business, owner = bakery
-    fake_gemini.state["reply"] = "Sorry, I cannot help with that."
-
-    body = client.post(SUGGEST_URL, headers=auth_headers(owner)).get_json()
-
-    assert body["ai_used"] is False
-    assert codes_of(body["picks"])[0] == ("10712", "keywords")
-
-
-def test_without_gemini_the_keyword_matches_are_returned(client, bakery, nic_codes, auth_headers):
-    business, owner = bakery  # TEST_CONFIG has no GEMINI_API_KEY
-
-    body = client.post(SUGGEST_URL, headers=auth_headers(owner)).get_json()
-
-    assert body["ai_used"] is False
-    assert codes_of(body["picks"])[0] == ("10712", "keywords")
-    assert body["shortlist"][0]["code"] == "10712"
-
-
-# --- Search and save --------------------------------------------------------------
+# --- ON10: search and save -------------------------------------------------------
 
 
 def test_search_by_word_or_code(client, bakery, nic_codes, auth_headers):
@@ -248,18 +110,9 @@ def test_an_unknown_code_is_refused(client, bakery, nic_codes, auth_headers):
 # --- Access -----------------------------------------------------------------------
 
 
-def test_before_registering_suggestions_are_404(client, make_user, auth_headers):
-    owner = make_user(role=UserRole.BUSINESS)
-
-    response = client.post(SUGGEST_URL, headers=auth_headers(owner))
-
-    assert response.status_code == 404
-
-
 def test_ca_and_admin_cannot_use_the_nic_endpoints(client, make_user, auth_headers):
     for role in (UserRole.CA, UserRole.ADMIN):
         headers = auth_headers(make_user(role=role))
-        assert client.post(SUGGEST_URL, headers=headers).status_code == 403
         search = client.get(SEARCH_URL, query_string={"q": "bread"}, headers=headers)
         assert search.status_code == 403
         assert client.put(SAVE_URL, json={"code": "10711"}, headers=headers).status_code == 403

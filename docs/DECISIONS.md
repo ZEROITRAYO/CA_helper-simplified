@@ -4,6 +4,19 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-08: No "Your regulatory profile" box and no NIC suggestions
+
+**What**
+- The business profile page no longer shows the "Your regulatory profile" box with a "why" for every line. The
+  summary row (e.g. Micro · QRMP · ITR-4) stays, with a "See your filings in the compliance calendar" link beside
+  it. The backend still computes the profile: the filings, due dates, peer insights and news alerts need it.
+- The NIC code is found only with the search box. The "Suggest codes" button, Gemini's picks, the keyword
+  shortlist, `POST /onboarding/nic-suggestions` and `eval/nic/` (which measured the suggestions) are gone.
+  Gemini is now used only by the news monitor.
+
+**Why:** a shorter page and less code; the search finds the code just as well when the business knows its trade.
+
+
 ## 2026-10-08: Demo data is SQL in the shared Neon database, not seed code
 
 **What**

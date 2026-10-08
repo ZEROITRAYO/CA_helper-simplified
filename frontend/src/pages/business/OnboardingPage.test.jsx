@@ -79,7 +79,7 @@ describe("business profile page", () => {
     expect(await screen.findByText("Enter a valid 15-character GSTIN.")).toBeInTheDocument();
   });
 
-  it("registers and then shows the profile with the reasons", async () => {
+  it("registers and then shows the profile summary", async () => {
     loginAs("business");
     const fetchMock = fakeApi({
       ...STATES_ROUTE,
@@ -92,9 +92,9 @@ describe("business profile page", () => {
     const user = await fillForm();
     await user.click(screen.getByRole("button", { name: "Register business" }));
 
-    expect(await screen.findByText("Your regulatory profile")).toBeInTheDocument();
-    expect(screen.getByText("Regular (quarterly, QRMP)")).toBeInTheDocument();
-    expect(screen.getByText("Presumptive income is filed in ITR-4.")).toBeInTheDocument();
+    const summary = await screen.findByRole("list", { name: "Profile summary" });
+    expect(summary).toHaveTextContent("QRMP");
+    expect(screen.queryByText("Your regulatory profile")).not.toBeInTheDocument();
     const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === "POST");
     const sent = JSON.parse(init.body);
     expect(sent.pan).toBe("ABCDE1234F"); // capitalised
@@ -107,12 +107,11 @@ describe("business profile page", () => {
     renderApp("/business/onboarding");
 
     expect(await screen.findByText("Asha Traders")).toBeInTheDocument();
-    // The MSME tier line of the profile (the summary chips repeat it).
-    expect(screen.getByText("MSME tier").parentElement).toHaveTextContent("Micro");
-    expect(screen.getByRole("link", { name: "compliance calendar" })).toHaveAttribute(
-      "href",
-      "/business/compliance",
-    );
+    expect(screen.getByRole("list", { name: "Profile summary" })).toHaveTextContent("Micro");
+    // The link to the filings sits beside the summary.
+    expect(
+      screen.getByRole("link", { name: "See your filings in the compliance calendar" }),
+    ).toHaveAttribute("href", "/business/compliance");
   });
 
   it("checks the GSTIN's check character, state code and PAN before sending", async () => {
@@ -146,7 +145,7 @@ describe("business profile page", () => {
     await user.click(screen.getByLabelText("Quarterly (QRMP)"));
     await user.click(screen.getByRole("button", { name: "Register business" }));
 
-    await screen.findByText("Your regulatory profile");
+    await screen.findByRole("list", { name: "Profile summary" });
     const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === "POST");
     expect(JSON.parse(init.body)).toMatchObject({ gst_qrmp: true, gstin: "27ABCDE1234F1Z0" });
   });

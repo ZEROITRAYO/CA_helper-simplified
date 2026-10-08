@@ -217,12 +217,6 @@ export function updateBusiness(form) {
   return apiFetch("/api/v1/onboarding/business", { method: "PUT", body: form });
 }
 
-// Up to 3 suggested NIC activity codes for the business's description (nothing is saved):
-// { picks: [{code, description, reason, source: "ai" | "keywords"}], shortlist, ai_used }.
-export function suggestNicCodes() {
-  return apiFetch("/api/v1/onboarding/nic-suggestions", { method: "POST" });
-}
-
 // Searches the official NIC list by code or words (for choosing a code by hand).
 // Only runs once at least 2 characters are typed.
 export function useNicSearch(query) {

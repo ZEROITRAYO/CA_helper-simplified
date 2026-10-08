@@ -7,7 +7,6 @@ import { fakeApi, loginAs, renderApp } from "@/test/utils";
 // The "Business activity (NIC code)" card on the Business profile page.
 
 const BUSINESS_URL = "/api/v1/onboarding/business";
-const SUGGEST = "POST /api/v1/onboarding/nic-suggestions";
 const SAVE = "PUT /api/v1/onboarding/business/nic-code";
 
 const MY_BUSINESS = {
@@ -69,33 +68,19 @@ describe("NIC code card", () => {
     expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
   });
 
-  it("shows the AI picks and saves the one the user confirms", async () => {
+  it("finds a code with the search and saves the one the user confirms", async () => {
     loginAs("business");
     const fetchMock = fakeApi(
       routes({
-        [SUGGEST]: [
-          200,
-          {
-            picks: [
-              { ...BISCUITS, reason: "They bake biscuits and cakes.", source: "ai" },
-              { ...BREAD, reason: "A bakery may also make bread.", source: "ai" },
-            ],
-            shortlist: [BISCUITS, BREAD],
-            ai_used: true,
-          },
-        ],
+        "GET /api/v1/onboarding/nic-codes?q=bread": [200, [BREAD]],
         [SAVE]: [200, BREAD],
       }),
     );
     renderApp("/business/onboarding");
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: "Suggest codes" }));
-    expect(await screen.findByText("They bake biscuits and cakes.")).toBeInTheDocument();
-    expect(screen.getAllByText("AI suggestion, please check")).toHaveLength(2);
-    expect(screen.getByLabelText(/10712/)).toBeChecked(); // the best pick is ticked first
-
-    await user.click(screen.getByLabelText(/10711/));
+    await user.type(await screen.findByLabelText("Search the NIC list"), "bread");
+    await user.click(await screen.findByLabelText(/10711/));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(await screen.findByText("Saved.")).toBeInTheDocument();
@@ -105,48 +90,13 @@ describe("NIC code card", () => {
     );
   });
 
-  it("says when the picks are keyword matches only", async () => {
+  it("has no suggestions, only the search", async () => {
     loginAs("business");
-    fakeApi(
-      routes({
-        [SUGGEST]: [
-          200,
-          {
-            picks: [
-              { ...BISCUITS, reason: "Matches words in your description.", source: "keywords" },
-            ],
-            shortlist: [BISCUITS],
-            ai_used: false,
-          },
-        ],
-      }),
-    );
+    fakeApi(routes({}));
     renderApp("/business/onboarding");
-    const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: "Suggest codes" }));
-
-    expect(
-      await screen.findByText(
-        "AI suggestions are not available right now; these are keyword matches.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Keyword match")).toBeInTheDocument();
-  });
-
-  it("finds codes by searching the list", async () => {
-    loginAs("business");
-    fakeApi(
-      routes({
-        "GET /api/v1/onboarding/nic-codes?q=bread": [200, [BREAD]],
-      }),
-    );
-    renderApp("/business/onboarding");
-    const user = userEvent.setup();
-
-    await user.type(await screen.findByLabelText("None of these? Search the list"), "bread");
-
-    expect(await screen.findByLabelText(/10711/)).toBeInTheDocument();
+    expect(await screen.findByLabelText("Search the NIC list")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Suggest codes" })).not.toBeInTheDocument();
   });
 
   it("shows the saved code", async () => {

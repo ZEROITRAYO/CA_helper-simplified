@@ -5,7 +5,6 @@ anonymised data only (fake names, fake but correctly formatted PAN/GSTIN, no rea
 
 | Folder | Measures | Evaluates module | Data |
 |---|---|---|---|
-| `nic/` | NIC code suggestion top-1 / top-3 accuracy | onboarding (ON10) | 40 descriptions |
 | `ocr/` | OCR field accuracy on sample documents | documents (DO8, DO9), onboarding (ON13) | 15 made-up documents, 74 fields |
 | `regulatory/` | Which news items are kept, and the fields read from them | regulatory (RE3) | 10 real public items |
 
@@ -15,7 +14,6 @@ path, the app context, the table). Run them in the backend container (`docker co
 
 ```bash
 docker compose exec backend python ../eval/ocr/evaluate.py                       # no database, no Gemini
-docker compose exec backend python ../eval/nic/evaluate.py [--keywords-only]      # database (docker compose up; flask --app app seed)
 docker compose exec backend python ../eval/regulatory/evaluate.py [--keywords-only]
 ```
 

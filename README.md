@@ -59,8 +59,8 @@ Other commands:
 | Empty a local database and seed it again (refuses Neon) | `docker compose exec backend flask --app app reset-db` |
 | After a change to `requirements.txt` or `package.json` | `docker compose up --build` |
 
-Without `GEMINI_API_KEY` everything still works: the NIC suggestions and the news monitor use
-their keyword fallbacks. The evaluation scripts for the report are in [eval/](eval/README.md).
+Without `GEMINI_API_KEY` everything still works: the news monitor uses its keyword fallback (Gemini
+is used only there). The evaluation scripts for the report are in [eval/](eval/README.md).
 
 ## Demo script
 

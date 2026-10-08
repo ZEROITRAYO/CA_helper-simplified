@@ -5,8 +5,6 @@ The profile is computed from legal thresholds stored in `rule_thresholds`; no le
 number is written in this file.
 """
 
-import json
-import logging
 import re
 from decimal import Decimal, InvalidOperation
 
@@ -44,7 +42,6 @@ from app.utils import (
     validation_error,
 )
 
-log = logging.getLogger(__name__)
 
 bp = Blueprint("onboarding", __name__)
 
@@ -452,158 +449,8 @@ def compute_profile(business, today):
     }
 
 
-# --- NIC activity code -------------------------------------------------------------------
-#
-# 1. Keyword shortlist: the codes whose description contains the most words of the
-#    business's own description (real codes only, from the nic_codes table).
-# 2. Gemini picks the best 3 from that shortlist and says why. A code that is not in
-#    the shortlist is thrown away, so Gemini can never invent a code.
-# 3. Fewer than 3 good picks (or no Gemini): the top keyword matches fill the gap.
-# 4. The user confirms one code; nothing is saved before that.
-
-NIC_SHORTLIST_SIZE = 15
-NIC_PICKS = 3
+# The business finds its NIC activity code with the search below; nothing is suggested.
 NIC_SEARCH_LIMIT = 20
-
-# Words that say nothing about the activity; they are not used for matching.
-COMMON_WORDS = {
-    "and", "the", "for", "with", "our", "are", "from", "all", "any", "also", "into", "its",
-    "this", "that", "who", "we", "you", "your", "they", "them", "their", "have", "has",
-    "business", "company", "firm", "services", "service", "work", "working", "provide",
-    "providing", "products", "product", "sell", "selling", "sale", "sales", "other", "etc",
-    "like", "such", "small", "local", "customers", "people", "since", "year", "years",
-    "based", "various", "different", "good", "quality", "india", "own", "near", "doing",
-    "done", "make", "making", "made",
-}  # fmt: skip
-
-
-def _match_words(description):
-    """The useful words of a description, lowercase, singular, without personal data."""
-    words = []
-    clean, _ = utils.scrub_pii(description)
-    text = re.sub(r"\[[a-z]+\]", " ", clean.lower())  # the [EMAIL]-style placeholders
-    text = re.sub(r"[^a-z0-9 ]", " ", text)
-    for word in text.split():
-        if len(word) < 3 or word in COMMON_WORDS:
-            continue
-        if len(word) > 4 and word.endswith("s"):
-            word = word[:-1]  # "biscuits" also matches "biscuit"
-        if word not in words:
-            words.append(word)
-    return words
-
-
-def _word_in(word, text):
-    """Does `text` contain `word` (short words only as whole words)?"""
-    if len(word) <= 3:
-        return re.search(r"\b" + re.escape(word) + r"s?\b", text) is not None
-    return re.search(r"\b" + re.escape(word), text) is not None
-
-
-def shortlist_nic_codes(description, limit=NIC_SHORTLIST_SIZE):
-    """The codes whose description best matches the words of `description`, best first.
-
-    A word found in few codes says more than a common one ("tea" is in 4 codes,
-    "station" in many), so each matching word adds 1 / (number of codes containing it).
-    """
-    words = _match_words(description)
-    if not words:
-        return []
-
-    # 1. Which codes contain which words.
-    found_in = {word: 0 for word in words}  # word -> how many codes contain it
-    matched = []  # (code, [its matching words])
-    for nic in db.session.scalars(select(NicCode).order_by(NicCode.code)):
-        nic_text = nic.description.lower()
-        nic_words = []
-        for word in words:
-            if _word_in(word, nic_text):
-                nic_words.append(word)
-                found_in[word] += 1
-        if nic_words:
-            matched.append((nic, nic_words))
-
-    # 2. Score: rarer words count more.
-    scored = []
-    for nic, nic_words in matched:
-        score = 0.0
-        for word in nic_words:
-            score += 1 / found_in[word]
-        scored.append((score, nic))
-
-    # Highest score first; equal scores keep code order (the sort is stable).
-    scored.sort(key=lambda pair: pair[0], reverse=True)
-    return [nic for _, nic in scored[:limit]]
-
-
-def _nic_prompt(description, shortlist):
-    """The question for Gemini: the description and the shortlist, nothing else."""
-    lines = [f"{nic.code}: {nic.description}" for nic in shortlist]
-    return (
-        "You help an Indian small business choose its NIC-2008 activity code.\n"
-        f"Business description: {description}\n\n"
-        "Choose the 3 codes from this list that best fit the business, best first:\n"
-        + "\n".join(lines)
-        + "\n\nUse only codes from the list. For each, give a one-sentence reason.\n"
-        'Reply with JSON only: {"picks": [{"code": "...", "reason": "..."}]}'
-    )
-
-
-def _pick(nic, reason, source):
-    return {"code": nic.code, "description": nic.description, "reason": reason, "source": source}
-
-
-def _already_picked(picks, code):
-    return any(pick["code"] == code for pick in picks)
-
-
-def _ai_picks(reply, shortlist):
-    """The valid picks in Gemini's reply: codes from the shortlist only, no repeats, at most 3."""
-    try:
-        data = json.loads(reply)
-    except ValueError:
-        log.warning("Gemini's NIC reply was not JSON")
-        return []
-    if not isinstance(data, dict) or not isinstance(data.get("picks"), list):
-        return []
-
-    allowed = {nic.code: nic for nic in shortlist}
-    picks = []
-    for item in data["picks"]:
-        if len(picks) == NIC_PICKS:
-            break
-        if not isinstance(item, dict):
-            continue
-        code = str(item.get("code", "")).strip()
-        if code not in allowed or _already_picked(picks, code):
-            continue  # an invented or repeated code is dropped
-        reason = str(item.get("reason", "")).strip()[:300]
-        picks.append(_pick(allowed[code], reason or "Suggested by AI.", "ai"))
-    return picks
-
-
-def suggest_nic_codes(business):
-    """Up to 3 suggested NIC codes (Gemini, else keyword matches); nothing saved."""
-    shortlist = shortlist_nic_codes(business.description)
-
-    picks = []
-    if shortlist and utils.gemini_available():
-        try:
-            reply = utils.ask_gemini(_nic_prompt(business.description, shortlist), want_json=True)
-            picks = _ai_picks(reply, shortlist)
-        except ApiError:
-            pass  # no Gemini: keyword matches only
-    ai_used = len(picks) > 0
-
-    # Fill up to 3 with the best keyword matches not picked yet.
-    for nic in shortlist:
-        if len(picks) == NIC_PICKS:
-            break
-        if not _already_picked(picks, nic.code):
-            picks.append(_pick(nic, "Matches words in your description.", "keywords"))
-
-    shortlist = [nic_to_dict(nic) for nic in shortlist]
-    return {"picks": picks, "shortlist": shortlist, "ai_used": ai_used}
 
 
 # --- Routes ------------------------------------------------------------------------------
@@ -668,12 +515,6 @@ def update_business():
     page = business_page(business)
     page["changes"] = {"profile": changed, "filings": filings}
     return jsonify(page)
-
-
-@bp.post("/onboarding/nic-suggestions")
-@roles_required(UserRole.BUSINESS)
-def suggest_nic_codes_for_me():
-    return jsonify(suggest_nic_codes(current_business()))
 
 
 @bp.get("/onboarding/nic-codes")
