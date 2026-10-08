@@ -114,7 +114,7 @@ describe("Request this CA page", () => {
     const send = await screen.findByRole("button", { name: "Send request" });
     expect(send).toBeDisabled();
     expect(screen.getByText(/Tick at least one filing\./)).toBeInTheDocument();
-    expect(screen.getByText(/The CA has 48 hours to respond\./)).toBeInTheDocument();
+    expect(screen.getByText(/you can\s+withdraw it until then/)).toBeInTheDocument();
 
     await userEvent.setup().click(screen.getByLabelText(/GSTR-3B Aug 2026/));
 

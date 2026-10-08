@@ -59,8 +59,8 @@ Tax audit applicability is computed in the profile (it changes the ITR due date)
    verification. Unverified CAs are hidden from the marketplace.
 2. **Practice profile:** specializations, languages, city, service menu priced against the standard catalog,
    capacity.
-3. **Incoming requests:** accept at the listed (fixed) prices, or decline. Requests auto-expire after 48 hours and
-   the business is re-matched.
+3. **Incoming requests:** accept at the listed (fixed) prices, or decline. A request never expires; the business
+   can withdraw it until the CA answers.
 4. **Invite existing clients:** the client joins and must approve the CA's access.
 5. **Multi-client dashboard:** urgency score per client with a "why flagged" breakdown.
 6. **Deadline batch view:** all clients with the same filing due, their document readiness, bulk document requests.
@@ -73,13 +73,7 @@ Tax audit applicability is computed in the profile (it changes the ITR due date)
 - Verify, suspend or remove users and CAs.
 - Edit configuration data: rule thresholds, obligation templates, penalty rules and the service catalog.
   Explanations, instructions and checklists live in `content/` files (changed in the repo, not from the UI).
-- Approve flagged regulatory news before alerts are sent.
 - **No** database-structure changes from the UI.
-
-## Platform-wide
-- **Regulatory monitor:** scrape a news website (and official update pages) for deadline or filing-rule changes →
-  Gemini extracts the change → one-click admin approval → affected users are flagged, emailed and shown in their
-  tray; their CAs' urgency scores rise.
 
 ## Out of scope in v1
 Advance tax, GSTR-9, ROC/MCA forms, monthly TDS deposit, Telegram/SMS/WhatsApp, in-platform payments, mobile app,

@@ -77,7 +77,7 @@ Column types are in `models.py`; this lists what each table is for and its key f
 | `ca_profiles` | a CA's practice profile | user_id → users (unique), membership_no (6 digits, unique), cop_number, city, languages and specializations (`varchar[]`, GIN index on specializations), capacity (most active clients at once), years_experience, about, verification_status, rejection_reason, verified_at, verified_by_id → users, cop_document_id → documents |
 | `service_catalog` | a standard service every CA prices against | code (unique, e.g. `gstr_3b`), name, description, unit, sort_order, form_code (null for services that are not one filing, e.g. tax audit). Class `CatalogService`. |
 | `ca_services` | one CA's price for one catalog service (N–N) | ca_profile_id, service_id, price (> 0). Unique (ca_profile_id, service_id). Unticking a service deletes the row |
-| `engagements` | one business working with one CA | business_id, ca_profile_id, status, requested_at, responded_at, expires_at (48 hours after the request), activated_at, completed_at. A business may have several CAs at once |
+| `engagements` | one business working with one CA | business_id, ca_profile_id, status, requested_at, responded_at, activated_at, completed_at. A business may have several CAs at once |
 | `engagement_items` | one filing in an engagement | engagement_id, compliance_item_id, service_id → service_catalog, listed_price (the CA's fixed price when requested), agreed_price (the same, set when the CA accepts). Unique (engagement, item) |
 | `ratings` | the business's review of one engagement | engagement_id (unique), stars (1–5), review. Averages are computed, never stored |
 
@@ -86,13 +86,10 @@ Column types are in `models.py`; this lists what each table is for and its key f
 |---|---|---|
 | `document_requests` | a CA's request for one document | engagement_id, compliance_item_id, checklist_key, message, status, fulfilled_at, document_id → documents (the file that answered it) |
 
-### Regulatory
-| Table | One row is... | Key fields |
-|---|---|---|
-| `news_sources` | a site or feed we read | name, url (unique), kind, enabled |
-| `news_articles` | a saved article | source_id, url (unique), title, published_at, content, content_hash (SHA-256, unique) |
-| `regulatory_changes` | a change found in an article | article_id, change_type, summary, form_codes (`varchar[]`), affected_categories (JSONB: `extracted_by` `ai` or `keywords`, optional `gst_schemes`, `entity_types`, `states`; a missing list = everyone), dates (JSONB: optional `old_due_date`, `new_due_date`, `period`), **notified_at** (when the affected users were told; null for a change found by keywords only, which is listed but sent to nobody). There is no admin approval |
-| `regulatory_change_matches` | a business told about a change (N–N) | change_id, business_id, notified_at. Unique (change, business). Drives the CA urgency points for 30 days |
+### Regulatory (unused)
+`news_sources`, `news_articles`, `regulatory_changes` and `regulatory_change_matches` stay in the database but
+nothing uses them since the news monitor was removed (8 Oct 2026); `migrations/env.py` tells `flask db check` to
+ignore them.
 
 **Removed in the simplification:** `pro_bono_requests` and the quote and pro-bono columns (removed on 7 Oct 2026), `kb_chunks` and `chat_messages` (the AI assistant, removed on 6 Oct 2026), `client_invites`, `ca_notes`, `notification_settings` (replaced by
 `users.email_notifications`) and `admin_audit_log`; the columns `users.is_active`, `email_otps.attempts`,
@@ -123,8 +120,6 @@ Cardinality is read left to right: "1–N" = one row on the left has many on the
 | engagements | 1–N | engagement_items | each item → one compliance item and one catalog service |
 | engagements | 1–0..1 | ratings | `ratings.engagement_id` unique |
 | engagements | 1–N | document_requests | each → one compliance item, 0..1 fulfilling document |
-| news_sources | 1–N | news_articles | 1–N regulatory_changes (`article_id`) |
-| regulatory_changes | N–N | businesses | `regulatory_change_matches` (+ notified_at) |
 
 ```mermaid
 erDiagram
@@ -154,10 +149,6 @@ erDiagram
     engagements ||--o{ document_requests : "asks"
     compliance_items ||--o{ document_requests : "for"
     documents |o--o{ document_requests : "fulfils"
-    news_sources ||--o{ news_articles : "publishes"
-    news_articles ||--o{ regulatory_changes : "mentions"
-    regulatory_changes ||--o{ regulatory_change_matches : "told"
-    businesses ||--o{ regulatory_change_matches : "affected"
 ```
 
 `penalty_rules` and `rule_thresholds` are matched by form code or key and date, not by foreign key.
@@ -262,22 +253,16 @@ Startup & MSME advisory. The first seven are the tracked forms, so "CAs for this
 
 | Code | Label | Notes |
 |---|---|---|
-| `requested` | Requested | initial state; expires 48 hours later if unanswered |
+| `requested` | Requested | initial state; stays open until the CA answers or the business withdraws it |
 | `active` | Active | the CA accepted at the listed (fixed) prices |
 | `completed` | Completed | the work is done; the business can rate it |
 | `declined` | Declined | the CA declined |
-| `expired` | Expired | no answer within 48 hours |
 | `cancelled` | Cancelled | the business withdrew the request |
 
-Lifecycle: `requested → active`; a request can end `declined`, `expired` or `cancelled`; `active → completed`.
+Lifecycle: `requested → active`; a request can end `declined` or `cancelled` (it never expires); `active → completed`.
 **Open** = `requested` or `active`. There are no quotes: a CA's fee is fixed at their listed price.
 
 **`document_requests.status`** (`DocumentRequestStatus`): `open` Open · `fulfilled` Fulfilled · `cancelled` Cancelled
-
-**`news_sources.kind`** (`NewsSourceKind`): `rss` RSS feed · `html` Web page
-
-**`regulatory_changes.change_type`** (`ChangeType`): `due_date_extension` Due date extension · `rate_change` Rate
-change · `new_rule` New rule · `other` Other
 
 ## Access rules
 
@@ -289,7 +274,7 @@ functions below; the database stores no permissions.
 | A business user | all of its own data |
 | A CA with a `requested` engagement | what the engagement shows: a summary of the business and **the filings in that request**. No PAN, GSTIN or TAN, no documents |
 | A CA with an **`active`** engagement | the full business profile, **only the filings in their active engagements**, and **only the documents of those filings** (linked files and acknowledgements) |
-| A CA after the engagement is `completed`, `declined`, `expired` or `cancelled` | nothing of that business, except the rating of their own engagement |
+| A CA after the engagement is `completed`, `declined` or `cancelled` | nothing of that business, except the rating of their own engagement |
 | An admin | metadata, **never document contents** |
 
 The functions that decide a CA's access (in `backend/app/marketplace.py`):

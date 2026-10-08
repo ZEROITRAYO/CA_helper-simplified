@@ -177,9 +177,9 @@ def test_urgency_counts_near_deadlines_and_open_requests(monkeypatch):
     def due(day):
         return SimpleNamespace(due_date=day)
 
-    soon = ca_workspace_service._urgency([due(date(2026, 10, 1))], 2, None, TODAY)
-    week = ca_workspace_service._urgency([due(date(2026, 10, 4))], 0, None, TODAY)
-    later = ca_workspace_service._urgency([due(date(2026, 11, 1))], 0, None, TODAY)
+    soon = ca_workspace_service._urgency([due(date(2026, 10, 1))], 2, TODAY)
+    week = ca_workspace_service._urgency([due(date(2026, 10, 4))], 0, TODAY)
+    later = ca_workspace_service._urgency([due(date(2026, 11, 1))], 0, TODAY)
 
     assert soon["reasons"] == [
         {"reason": "Next deadline in 3 day(s)", "points": 25},

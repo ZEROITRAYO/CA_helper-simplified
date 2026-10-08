@@ -16,7 +16,7 @@ if str(BACKEND) not in sys.path:
 
 
 def app_context():
-    """An app context of the development app (the database and GEMINI_API_KEY from .env)."""
+    """An app context of the development app (the database from .env)."""
     from app import create_app
 
     return create_app().app_context()

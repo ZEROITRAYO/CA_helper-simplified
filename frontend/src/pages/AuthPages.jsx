@@ -776,7 +776,7 @@ const SECTIONS = [
     points: [
       "PAN, GSTIN, TAN and phone numbers are encrypted in our database.",
       "Uploaded documents are encrypted and stored on our server; they are never sent anywhere else.",
-      "Our AI features (activity-code suggestions and the news monitor) never receive your PAN, GSTIN, TAN, name, email, phone, address or documents.",
+      "Nothing you enter is sent to an AI service.",
     ],
   },
   {

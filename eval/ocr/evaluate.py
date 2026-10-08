@@ -3,7 +3,7 @@
 For each file in samples/, the same code as an upload runs: app/ocr.py reads the
 text, then app/ocr.py finds the fields. A field counts as correct when it
 equals labels.csv (form, month, quarter and financial_year: when it is among those found).
-Needs no database and no Gemini. Run in the backend container:
+Needs no database. Run in the backend container:
     docker compose exec backend python ../eval/ocr/evaluate.py
 """
 

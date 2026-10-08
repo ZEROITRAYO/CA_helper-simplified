@@ -14,6 +14,15 @@ fileConfig(config.config_file_name)
 logger = logging.getLogger("alembic.env")
 
 
+# Tables of removed features that stay in the database, unused: `flask db check` and
+# autogenerate leave them alone instead of asking to drop them.
+UNUSED_TABLES = {"news_sources", "news_articles", "regulatory_changes", "regulatory_change_matches"}
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    return not (type_ == "table" and name in UNUSED_TABLES)
+
+
 def get_engine():
     try:
         # this works with Flask-SQLAlchemy<3 and Alchemical
@@ -93,7 +102,12 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=get_metadata(), **conf_args)
+        context.configure(
+            connection=connection,
+            target_metadata=get_metadata(),
+            include_object=include_object,
+            **conf_args,
+        )
 
         with context.begin_transaction():
             context.run_migrations()

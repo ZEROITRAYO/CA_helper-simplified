@@ -1,10 +1,9 @@
-"""Helpers every feature uses: errors, access control, email, passwords, Gemini, GSTIN
+"""Helpers every feature uses: errors, access control, email, passwords, GSTIN
 checks, amounts, the upload checks and the page shapes of list endpoints.
 """
 
 import json
 import logging
-import re
 import smtplib
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
@@ -206,22 +205,12 @@ can request another CA from "Find a CA" in CA Helper.
 
 CA Helper
 """,
-    "engagement_expired": """Hello {{ owner_name }},
-
-{{ ca_name }} did not answer your request within 48 hours, so it has expired.
-The filings in it are free again.
-
-To pick another CA, open "Find a CA" in CA Helper and choose the service:
-{{ service_names }}
-
-CA Helper
-""",
     "engagement_requested": """Hello {{ ca_name }},
 
 {{ business_name }} has sent you a request for {{ filing_count }} filing{{ "s" if filing_count != 1 }}.
 
 Open "My engagements" in CA Helper to accept it at your listed prices or decline
-it. Please answer within 48 hours.
+it.
 
 CA Helper
 """,
@@ -436,103 +425,3 @@ def check_file(data, mime_type):
         raise ApiError(400, "FILE_TYPE_NOT_ALLOWED", "Upload a PDF, JPG or PNG file.")
     if len(data) > max_mb * 1024 * 1024:
         raise ApiError(400, "FILE_TOO_LARGE", f"The file is larger than {max_mb} MB.")
-
-
-# --- Gemini -----------------------------------------------------------------------------
-
-
-log = logging.getLogger(__name__)
-
-# (placeholder, pattern), checked in this order. A GSTIN contains a PAN, so GSTINs go
-# first; a 12-digit Aadhaar-like number goes before phone numbers (10 digits).
-PII_PATTERNS = [
-    ("GSTIN", re.compile(r"\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b", re.IGNORECASE)),
-    ("PAN", re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b", re.IGNORECASE)),
-    ("EMAIL", re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")),
-    ("AADHAAR", re.compile(r"\b[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}\b")),
-    ("PHONE", re.compile(r"(\+91[ -]?)?\b[6-9][0-9]{4}[ -]?[0-9]{5}\b")),
-]
-
-
-def scrub_pii(text):
-    """Replace PAN, GSTIN, email, phone and Aadhaar-like numbers with placeholders."""
-    found = []
-    for kind, pattern in PII_PATTERNS:
-        if pattern.search(text):
-            found.append(kind)
-            text = pattern.sub(f"[{kind}]", text)
-    return text, found
-
-
-def gemini_available():
-    """True when a Gemini API key is configured."""
-    return bool(current_app.config.get("GEMINI_API_KEY"))
-
-
-def _client():
-    """A Gemini client that retries only 503 (a 429 means the quota is used up)."""
-    # Imported here so the app starts (and tests run) without loading the Gemini library.
-    from google import genai
-    from google.genai import types
-
-    config = current_app.config
-    return genai.Client(
-        api_key=config["GEMINI_API_KEY"],
-        http_options=types.HttpOptions(
-            timeout=config["GEMINI_TIMEOUT_SECONDS"] * 1000,
-            retry_options=types.HttpRetryOptions(attempts=3, http_status_codes=[503]),
-        ),
-    )
-
-
-def _failure_reason(error):
-    """Why a Gemini call failed, for the log (never contains our prompt)."""
-    code = getattr(error, "code", None)
-    status = getattr(error, "status", None)
-    message = getattr(error, "message", None)
-    if code is None and status is None:
-        return type(error).__name__  # e.g. a timeout or no network
-    reason = f"{code} {status}"
-    if message:
-        reason += ": " + str(message)[:200]
-    return reason
-
-
-def _send_to_gemini(prompt, want_json):
-    """Send a scrubbed prompt to Gemini (tests replace this; call ask_gemini)."""
-    from google.genai import types
-
-    config = current_app.config
-    client = _client()
-    # We only ask for text; the library's automatic function calling stays off.
-    settings = types.GenerateContentConfig(
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
-    )
-    if want_json:
-        settings.response_mime_type = "application/json"
-    response = client.models.generate_content(
-        model=config["GEMINI_MODEL"], contents=prompt, config=settings
-    )
-    return response.text or ""
-
-
-def ask_gemini(prompt, want_json=False):
-    """Scrub `prompt`, send it to Gemini, return the reply. 503 GEMINI_UNAVAILABLE."""
-    clean_prompt, found = scrub_pii(prompt)
-    if found:
-        log.warning("Removed personal data before sending to Gemini: %s", ", ".join(found))
-
-    if not gemini_available():
-        raise ApiError(503, "GEMINI_UNAVAILABLE", "AI suggestions are not available right now.")
-
-    try:
-        return _send_to_gemini(clean_prompt, want_json)
-    except Exception as error:  # any library, network or quota error
-        log.error(
-            "Gemini call failed (model %s): %s",
-            current_app.config["GEMINI_MODEL"],
-            _failure_reason(error),
-        )
-        raise ApiError(
-            503, "GEMINI_UNAVAILABLE", "AI suggestions are not available right now."
-        ) from error

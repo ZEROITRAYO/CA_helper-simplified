@@ -29,7 +29,6 @@ from app import (
     documents,
     marketplace,
     onboarding,
-    regulatory,
 )
 from app.models import db
 from app.seed import register_commands
@@ -65,11 +64,6 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "CA Helper <no-reply@ca-helper.local>")
     # True: nothing is sent; messages are kept in app.utils.outbox (tests).
     MAIL_SUPPRESS_SEND = False
-
-    # Gemini (the Gemini functions in app/utils.py). No key: the AI features use their fallback.
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or None
-    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
-    GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "20"))
 
     # DEBUG | INFO | WARNING | ERROR
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
@@ -157,7 +151,6 @@ BLUEPRINTS = [
     admin.bp,
     alerts.bp,
     documents.bp,
-    regulatory.bp,
 ]
 
 

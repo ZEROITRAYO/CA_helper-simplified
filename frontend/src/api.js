@@ -699,57 +699,6 @@ export function fulfilDocumentRequest(requestId, documentId) {
   });
 }
 
-// --- regulatory --------------------------------------------------------------------------------
-
-// Names in the query cache; the pages refresh them after an action.
-export const REGULATORY_CHANGES_KEY = ["regulatory", "changes"];
-export const NEWS_SOURCES_KEY = ["regulatory", "sources"];
-
-// A change found in the news: { id, change_type, summary, form_codes,
-// affected_categories, dates, created_at, notified_at, article_title, article_url,
-// published_at, source_name, match_count }. affected_categories.extracted_by is
-// "keywords" when Gemini did not read the article (then nobody was told).
-
-// Business and CA: the changes about my forms, newest first.
-export function useRegulatoryUpdates() {
-  return useQuery({
-    queryKey: ["regulatory", "updates"],
-    queryFn: () => apiFetch("/api/v1/regulatory/updates"),
-  });
-}
-
-// Admin: every change found in the news, newest first.
-export function useRegulatoryChanges() {
-  return useQuery({
-    queryKey: REGULATORY_CHANGES_KEY,
-    queryFn: () => apiFetch("/api/v1/admin/regulatory/changes"),
-  });
-}
-
-// The news sources: [{ id, name, url, kind: "rss" | "html", enabled }].
-export function useNewsSources() {
-  return useQuery({
-    queryKey: NEWS_SOURCES_KEY,
-    queryFn: () => apiFetch("/api/v1/admin/regulatory/sources"),
-  });
-}
-
-export function addNewsSource(source) {
-  return apiFetch("/api/v1/admin/regulatory/sources", { method: "POST", body: source });
-}
-
-export function setNewsSourceEnabled(sourceId, enabled) {
-  return apiFetch(`/api/v1/admin/regulatory/sources/${sourceId}`, {
-    method: "PUT",
-    body: { enabled },
-  });
-}
-
-// Run the news scan now. Returns { sources, blocked_by_robots, failed, new_articles, changes }.
-export function scanNewsNow() {
-  return apiFetch("/api/v1/admin/regulatory/scan", { method: "POST" });
-}
-
 // --- admin -------------------------------------------------------------------------------------
 
 /** GET /api/v1/admin/dashboard */

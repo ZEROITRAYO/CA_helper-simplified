@@ -4,6 +4,25 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-08: No news monitor, no Gemini, and CA requests never expire
+
+**What**
+- **The regulatory news monitor is gone:** the daily scan, the admin "Regulatory news" page, the business and CA
+  "Regulatory updates" pages, the "Regulatory update" urgency points on the CA's clients, and
+  `eval/regulatory/`. Its four tables (`news_sources`, `news_articles`, `regulatory_changes`,
+  `regulatory_change_matches`) stay in the database, unused; `migrations/env.py` tells `flask db check` to ignore
+  them.
+- **No AI at all:** with the monitor gone nothing used Gemini, so `ask_gemini`, the PII scrubber for prompts, the
+  `GEMINI_*` settings and the `google-genai` package are removed.
+- **Requests never expire:** a request stays open until the CA accepts or declines it or the business withdraws
+  it (the CA is now told about a withdrawal). The 15-minute expiry job, the countdown and the `expired` status are
+  gone; migration `5e2a9d7c1b64` turns old expired requests into `cancelled` and drops `engagements.expires_at`.
+  `backend/demo_data.sql` was rebuilt through that migration.
+
+**Why:** less code; the team decided rule-change alerts are not needed, and withdraw / decline already end a
+request that nobody answers.
+
+
 ## 2026-10-08: No "Your regulatory profile" box and no NIC suggestions
 
 **What**

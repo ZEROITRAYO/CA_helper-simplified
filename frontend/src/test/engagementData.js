@@ -11,7 +11,6 @@ export function engagement(fields) {
     ca_name: "Meera Shah",
     business_name: "Asha Traders",
     requested_at: "2026-09-27T04:30:00Z",
-    expires_at: "2099-01-01T00:00:00Z", // far away, so the sample request never runs out of time
     responded_at: null,
     activated_at: null,
     completed_at: null,

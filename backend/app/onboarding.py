@@ -609,29 +609,6 @@ def count_businesses():
     return db.session.scalar(select(func.count(Business.id)))
 
 
-def business_categories(business_ids):
-    """Category-level facts of these businesses, to match regulatory changes."""
-    stmt = (
-        select(Business, RegulatoryProfile.gst_scheme)
-        .join(RegulatoryProfile, RegulatoryProfile.business_id == Business.id)
-        .where(Business.id.in_(list(business_ids)))
-        .order_by(Business.legal_name)
-    )
-    rows = []
-    for business, gst_scheme in db.session.execute(stmt):
-        rows.append(
-            {
-                "id": business.id,
-                "user_id": business.user_id,
-                "legal_name": business.legal_name,
-                "entity_type": business.entity_type,
-                "state": business.state,
-                "gst_scheme": gst_scheme,
-            }
-        )
-    return rows
-
-
 def business_ids_in_segment(entity_type, msme_tier):
     """The businesses with this entity type and MSME tier (peer insights)."""
     stmt = (

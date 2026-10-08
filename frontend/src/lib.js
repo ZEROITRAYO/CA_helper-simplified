@@ -135,7 +135,6 @@ export const ENGAGEMENT_STATUS_LABELS = {
   active: "Active",
   completed: "Completed",
   declined: "Declined",
-  expired: "Expired",
   cancelled: "Cancelled",
 };
 
@@ -244,24 +243,6 @@ export function monthLabel(isoDate) {
     month: "long",
     year: "numeric",
   });
-}
-
-// How long until a moment, for request deadlines: "expires in 31 h", "expires in 20 min".
-export function expiresInText(isoTimestamp) {
-  const minutes = Math.floor((new Date(isoTimestamp) - new Date()) / MILLISECONDS_PER_MINUTE);
-  if (minutes <= 0) {
-    // The worker marks the request "expired" within 15 minutes; until then it is still requested.
-    return "answer time over";
-  }
-  if (minutes < 60) {
-    return "expires in " + minutes + " min";
-  }
-  return "expires in " + Math.floor(minutes / 60) + " h";
-}
-
-// True once a moment (e.g. a request's answer deadline) has passed.
-export function isPast(isoTimestamp) {
-  return new Date(isoTimestamp) <= new Date();
 }
 
 // --- gstin -------------------------------------------------------------------------------------

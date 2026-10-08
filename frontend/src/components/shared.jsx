@@ -15,14 +15,10 @@ import {
 import {
   COMPLIANCE_STATUS_LABELS,
   ENGAGEMENT_STATUS_LABELS,
-  ENTITY_TYPE_LABELS,
-  expiresInText,
   filingFormLabel,
-  FORM_LABELS,
   formatDate,
   formatDateTime,
   formatRupees,
-  GST_SCHEME_LABELS,
   label,
 } from "@/lib";
 
@@ -203,7 +199,6 @@ const STATUS_COLORS = {
   active: "bg-green-100 text-green-700",
   completed: "bg-gray-100 text-gray-700",
   declined: "bg-red-100 text-red-700",
-  expired: "bg-gray-100 text-gray-700",
   cancelled: "bg-gray-100 text-gray-700",
 };
 
@@ -218,7 +213,7 @@ function total(items) {
 
 // The steps shown for each status, e.g. Requested → Active → Completed.
 function stepsFor(status) {
-  if (status === "declined" || status === "expired" || status === "cancelled") {
+  if (status === "declined" || status === "cancelled") {
     return ["requested", status];
   }
   return ["requested", "active", "completed"];
@@ -282,12 +277,6 @@ export function EngagementCard({ engagement, title, children }) {
         </CardTitle>
         <CardDescription>
           Requested {formatDateTime(engagement.requested_at)}
-          {isWaiting(engagement) && (
-            <span className="font-medium text-amber-800">
-              {" "}
-              · {expiresInText(engagement.expires_at)}
-            </span>
-          )}
         </CardDescription>
         <Timeline status={engagement.status} />
       </CardHeader>
@@ -336,103 +325,6 @@ export function EngagementCard({ engagement, title, children }) {
             {engagement.rating.review && <span> “{engagement.rating.review}”</span>}
           </p>
         )}
-        {children}
-      </CardContent>
-    </Card>
-  );
-}
-
-// True while a request waits for the CA's answer and has a deadline ("expires in 31 h").
-function isWaiting(engagement) {
-  return engagement.status === "requested" && Boolean(engagement.expires_at);
-}
-
-// --- RegulatoryChangeCard ----------------------------------------------------------------------
-
-const CHANGE_TYPE_LABELS = {
-  due_date_extension: "Due date extension",
-  rate_change: "Rate change",
-  new_rule: "New rule",
-  other: "Other",
-};
-
-// "GSTR-3B, GSTR-1"
-function formsText(formCodes) {
-  const names = [];
-  for (const code of formCodes) {
-    names.push(label(FORM_LABELS, code));
-  }
-  return names.join(", ");
-}
-
-// Who the change is for, e.g. "GST scheme: Regular (QRMP) · States: Maharashtra".
-function whoText(affected) {
-  const parts = [];
-  if (affected.gst_schemes) {
-    const names = [];
-    for (const code of affected.gst_schemes) names.push(label(GST_SCHEME_LABELS, code));
-    parts.push("GST scheme: " + names.join(", "));
-  }
-  if (affected.entity_types) {
-    const names = [];
-    for (const code of affected.entity_types) names.push(label(ENTITY_TYPE_LABELS, code));
-    parts.push("Business type: " + names.join(", "));
-  }
-  if (affected.states) {
-    parts.push("States: " + affected.states.join(", "));
-  }
-  if (parts.length === 0) {
-    return "Everyone with an open filing of these forms";
-  }
-  return parts.join(" · ");
-}
-
-/** One change found in the news, with its article; `children` go at the bottom. */
-export function RegulatoryChangeCard({ change, children }) {
-  const dates = change.dates;
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge>{label(CHANGE_TYPE_LABELS, change.change_type)}</Badge>
-          <Badge variant="secondary">{formsText(change.form_codes)}</Badge>
-          {change.affected_categories.extracted_by === "keywords" && (
-            <Badge variant="outline">Found by keywords: read the article</Badge>
-          )}
-        </div>
-        <CardTitle className="pt-2 text-base">{change.summary}</CardTitle>
-        <CardDescription>
-          From{" "}
-          <a href={change.article_url} target="_blank" rel="noreferrer" className="underline">
-            {change.article_title}
-          </a>{" "}
-          ({change.source_name}
-          {change.published_at ? ", " + formatDateTime(change.published_at) : ""})
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <dl className="grid gap-1 sm:grid-cols-[10rem_1fr]">
-          <dt className="text-muted-foreground">For</dt>
-          <dd>{whoText(change.affected_categories)}</dd>
-          {dates.period && (
-            <>
-              <dt className="text-muted-foreground">Period</dt>
-              <dd>{dates.period}</dd>
-            </>
-          )}
-          {dates.old_due_date && (
-            <>
-              <dt className="text-muted-foreground">Old due date</dt>
-              <dd>{formatDate(dates.old_due_date)}</dd>
-            </>
-          )}
-          {dates.new_due_date && (
-            <>
-              <dt className="text-muted-foreground">New due date</dt>
-              <dd>{formatDate(dates.new_due_date)}</dd>
-            </>
-          )}
-        </dl>
         {children}
       </CardContent>
     </Card>

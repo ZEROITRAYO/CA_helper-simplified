@@ -68,22 +68,16 @@ describe("CA: My engagements page", () => {
     expect(paths).toContain("/api/v1/marketplace/engagements/e2/complete");
   });
 
-  it("hides the answer buttons once the 48 hours are over", async () => {
+  it("keeps an old request open to answer: requests never expire", async () => {
     loginAs("ca");
     fakeApi({
-      [`GET ${LIST_URL}`]: [200, [engagement({ expires_at: "2020-01-01T00:00:00Z" })]],
+      [`GET ${LIST_URL}`]: [200, [engagement({ requested_at: "2020-01-01T00:00:00Z" })]],
     });
     renderApp("/ca/engagements");
 
     expect(
-      await screen.findByText(
-        "The 48 hours to answer are over. This request will close automatically.",
-      ),
+      await screen.findByRole("button", { name: "Accept at listed prices" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/answer time over/)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Accept at listed prices" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Decline" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Decline" })).toBeInTheDocument();
   });
 });

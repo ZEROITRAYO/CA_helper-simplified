@@ -3,26 +3,19 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import {
-  addNewsSource,
   ADMIN_CAS_KEY,
   ADMIN_STATS_KEY,
   errorMessage,
-  NEWS_SOURCES_KEY,
-  REGULATORY_CHANGES_KEY,
   rejectCa,
-  scanNewsNow,
-  setNewsSourceEnabled,
   useAdminCa,
   useAdminCas,
   useAdminDashboard,
   useAdminStats,
   useAdminUsers,
   useCertificateFile,
-  useNewsSources,
-  useRegulatoryChanges,
   verifyCa,
 } from "@/api";
-import { Pager, QueryStatus, RegulatoryChangeCard } from "@/components/shared";
+import { Pager, QueryStatus } from "@/components/shared";
 import {
   Badge,
   Button,
@@ -461,218 +454,5 @@ function Decision({ ca }) {
         )}
       </CardContent>
     </Card>
-  );
-}
-
-// --- RegulatoryAdminPage -----------------------------------------------------------------------
-
-const REGULATORY_TABS = ["Changes", "Sources"];
-
-/** /admin/regulatory: the changes found in the news, and the news sources. */
-export function RegulatoryAdminPage() {
-  const [tab, setTab] = useState(REGULATORY_TABS[0]);
-
-  return (
-    <div className="max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Regulatory news</h1>
-        <p className="text-sm text-muted-foreground">
-          Changes found in the news every morning. Those Gemini read are sent to the affected
-          users at once; those found by keywords only are not sent.
-        </p>
-      </div>
-      <div role="tablist" className="flex gap-2">
-        {REGULATORY_TABS.map((name) => (
-          <Button
-            key={name}
-            role="tab"
-            aria-selected={tab === name}
-            variant={tab === name ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTab(name)}
-          >
-            {name}
-          </Button>
-        ))}
-      </div>
-      {tab === REGULATORY_TABS[0] ? <Changes /> : <Sources />}
-    </div>
-  );
-}
-
-function Changes() {
-  const changes = useRegulatoryChanges();
-
-  if (!changes.isSuccess) return <QueryStatus query={changes} />;
-  if (changes.data.length === 0) {
-    return <p className="text-sm text-muted-foreground">No changes found yet.</p>;
-  }
-  return (
-    <div className="space-y-4">
-      {changes.data.map((change) => (
-        <RegulatoryChangeCard key={change.id} change={change}>
-          <p className="text-muted-foreground">
-            {change.notified_at
-              ? `Sent ${formatDateTime(change.notified_at)} · ${change.match_count} business(es) told`
-              : "Not sent to anyone"}
-          </p>
-        </RegulatoryChangeCard>
-      ))}
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Sources
-// ----------------------------------------------------------------------------
-
-const EMPTY_SOURCE = { name: "", url: "", kind: "rss" };
-
-function Sources() {
-  const queryClient = useQueryClient();
-  const sources = useNewsSources();
-  const [form, setForm] = useState(EMPTY_SOURCE);
-  const [error, setError] = useState(null);
-  const [scanResult, setScanResult] = useState(null);
-  const [scanning, setScanning] = useState(false);
-
-  async function onAdd(event) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await addNewsSource(form);
-      setForm(EMPTY_SOURCE);
-      queryClient.invalidateQueries({ queryKey: NEWS_SOURCES_KEY });
-    } catch (problem) {
-      setError(errorMessage(problem));
-    }
-  }
-
-  async function onToggle(source) {
-    setError(null);
-    try {
-      await setNewsSourceEnabled(source.id, !source.enabled);
-      queryClient.invalidateQueries({ queryKey: NEWS_SOURCES_KEY });
-    } catch (problem) {
-      setError(errorMessage(problem));
-    }
-  }
-
-  async function onScan() {
-    setError(null);
-    setScanResult(null);
-    setScanning(true);
-    try {
-      setScanResult(await scanNewsNow());
-      queryClient.invalidateQueries({ queryKey: REGULATORY_CHANGES_KEY });
-    } catch (problem) {
-      setError(errorMessage(problem));
-    }
-    setScanning(false);
-  }
-
-  let rows = [];
-  if (sources.data) {
-    rows = sources.data;
-  }
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>News sources</CardTitle>
-          <CardDescription>
-            Read every morning at 07:00. A site's robots.txt is checked first; a site that does not
-            allow us is skipped.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {sources.isPending && <p className="text-sm text-muted-foreground">Loading...</p>}
-          {rows.length > 0 && (
-            <ul className="divide-y text-sm">
-              {rows.map((source) => (
-                <li key={source.id} className="flex items-center justify-between gap-4 py-2">
-                  <span>
-                    <span className="font-medium">{source.name}</span>{" "}
-                    <span className="text-muted-foreground">
-                      ({source.kind === "rss" ? "RSS feed" : "web page"})
-                    </span>
-                    <span className="block text-xs break-all text-muted-foreground">
-                      {source.url}
-                    </span>
-                  </span>
-                  <Button size="sm" variant="outline" onClick={() => onToggle(source)}>
-                    {source.enabled ? "Switch off" : "Switch on"}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex items-center gap-3">
-            <Button size="sm" onClick={onScan} disabled={scanning}>
-              {scanning ? "Scanning..." : "Scan now"}
-            </Button>
-            {scanResult && (
-              <p role="status" className="text-sm">
-                {scanResult.new_articles} new article(s), {scanResult.changes} change(s) found
-                {scanResult.blocked_by_robots > 0 &&
-                  `, ${scanResult.blocked_by_robots} blocked by robots.txt`}
-                {scanResult.failed > 0 && `, ${scanResult.failed} could not be read`}.
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a source</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-3 sm:grid-cols-2" onSubmit={onAdd}>
-            <div className="space-y-2">
-              <Label htmlFor="source-name">Name</Label>
-              <Input
-                id="source-name"
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="source-kind">Kind</Label>
-              <select
-                id="source-kind"
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                value={form.kind}
-                onChange={(event) => setForm({ ...form, kind: event.target.value })}
-              >
-                <option value="rss">RSS feed</option>
-                <option value="html">Web page (its links are read)</option>
-              </select>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="source-url">URL</Label>
-              <Input
-                id="source-url"
-                placeholder="https://..."
-                value={form.url}
-                onChange={(event) => setForm({ ...form, url: event.target.value })}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit" size="sm" disabled={form.name === "" || form.url === ""}>
-                Add source
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

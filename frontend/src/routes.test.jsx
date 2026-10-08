@@ -37,8 +37,8 @@ describe("routes", () => {
   it("serves admin screens in the admin area", async () => {
     loginAs("admin");
     fakeApi({});
-    renderApp("/admin/regulatory");
+    renderApp("/admin/users");
 
-    expect(await screen.findByRole("heading", { name: "Regulatory news" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Users & CAs" })).toBeInTheDocument();
   });
 });

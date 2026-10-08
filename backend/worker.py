@@ -1,4 +1,4 @@
-"""The background worker: runs the 4 scheduled jobs in their own process.
+"""The background worker: runs the 2 scheduled jobs in their own process.
 
     docker compose --profile worker up     (only ONE teammate runs it)
 
@@ -10,7 +10,7 @@ import logging
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from app import alerts, compliance, create_app, marketplace, regulatory
+from app import alerts, compliance, create_app
 
 log = logging.getLogger("worker")
 
@@ -30,20 +30,10 @@ def build_scheduler(app):
         run_job, "interval", hours=1, args=[app, compliance.mark_overdue_filings],
         id="compliance.mark_overdue", name="compliance.mark_overdue",
     )
-    # Every 15 minutes, requests a CA did not answer within 48 hours expire.
-    scheduler.add_job(
-        run_job, "interval", minutes=15, args=[app, marketplace.expire_old_requests],
-        id="marketplace.expire_requests", name="marketplace.expire_requests",
-    )
     # Every morning at 08:15 (after the overdue job): T-7 / T-3 / T-1 and overdue reminders.
     scheduler.add_job(
         run_job, "cron", hour=8, minute=15, args=[app, alerts.send_reminders],
         id="alerts.reminders", name="alerts.reminders",
-    )
-    # Every morning at 07:00: read the news sources and tell users about rule changes.
-    scheduler.add_job(
-        run_job, "cron", hour=7, minute=0, args=[app, regulatory.scan_news],
-        id="regulatory.scan_news", name="regulatory.scan_news",
     )
     return scheduler
 

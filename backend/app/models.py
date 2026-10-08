@@ -521,7 +521,6 @@ class NotificationType(StrEnum):
     OVERDUE = "overdue"
     ENGAGEMENT_UPDATE = "engagement_update"
     DOCUMENT_REQUEST = "document_request"
-    REGULATORY_UPDATE = "regulatory_update"
     ACCOUNT = "account"
 
 
@@ -731,7 +730,6 @@ class EngagementStatus(StrEnum):
     ACTIVE = "active"
     COMPLETED = "completed"
     DECLINED = "declined"
-    EXPIRED = "expired"
     CANCELLED = "cancelled"
 
 
@@ -747,8 +745,6 @@ class Engagement(BaseModel):
     )
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # requested_at + 48 hours: an unanswered request expires then.
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -812,71 +808,3 @@ class DocumentRequest(BaseModel):
     fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # The file that answered it (empty until fulfilled).
     document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))
-
-
-# --- regulatory --------------------------------------------------------------------------
-
-
-class NewsSourceKind(StrEnum):
-    RSS = "rss"
-    HTML = "html"
-
-
-class ChangeType(StrEnum):
-    DUE_DATE_EXTENSION = "due_date_extension"
-    RATE_CHANGE = "rate_change"
-    NEW_RULE = "new_rule"
-    OTHER = "other"
-
-
-class NewsSource(BaseModel):
-    """A news site or official update page we scrape (switched off with `enabled`)."""
-
-    __tablename__ = "news_sources"
-
-    name: Mapped[str] = mapped_column(String(100))
-    url: Mapped[str] = mapped_column(String(500), unique=True)
-    kind: Mapped[str] = mapped_column(String(50))
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
-
-
-class NewsArticle(BaseModel):
-    """One scraped article; `content_hash` stops the same text being stored twice."""
-
-    __tablename__ = "news_articles"
-
-    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("news_sources.id"), index=True)
-    url: Mapped[str] = mapped_column(String(1000), unique=True)
-    title: Mapped[str] = mapped_column(String(500))
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    content: Mapped[str] = mapped_column(Text)
-    content_hash: Mapped[str] = mapped_column(String(64), unique=True)  # SHA-256 of content
-
-
-class RegulatoryChange(BaseModel):
-    """A deadline or rule change found in an article."""
-
-    __tablename__ = "regulatory_changes"
-    article_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("news_articles.id"), index=True)
-    change_type: Mapped[str] = mapped_column(String(50))
-    summary: Mapped[str] = mapped_column(Text)
-    # The forms it affects, e.g. {gstr_3b}: an array of FormCode values.
-    form_codes: Mapped[list[str]] = mapped_column(ARRAY(String(50)))
-    # Who it affects, e.g. {"extracted_by": "ai", "gst_schemes": ["regular_monthly"],
-    # "states": ["Maharashtra"]}; a missing list means everyone.
-    affected_categories: Mapped[dict] = mapped_column(JSONB)
-    # The dates it mentions, e.g. {"old_due_date": "2026-10-20", "new_due_date": "2026-10-31"}.
-    dates: Mapped[dict] = mapped_column(JSONB)
-    # When the affected users were told (empty for a change found by keywords only).
-    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class RegulatoryChangeMatch(BaseModel):
-    """A business told about a change (at most once per change)."""
-
-    __tablename__ = "regulatory_change_matches"
-    __table_args__ = (UniqueConstraint("change_id", "business_id"),)
-
-    change_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("regulatory_changes.id"))
-    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
-    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

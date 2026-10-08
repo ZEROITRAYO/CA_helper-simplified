@@ -4,7 +4,7 @@ The demo accounts and businesses are not made here: they are data in backend/dem
 (see the README). This file seeds the service catalog; the legal rule thresholds, the
 obligation templates and the penalty rules of the 7 forms, each with its official source
 (values not confirmed yet are marked TODO_VERIFY, see docs/TODO_VERIFY.md); the official NIC
-activity codes from content/reference/nic_2008.csv; and the regulatory monitor's news sources.
+activity codes from content/reference/nic_2008.csv.
 
 Every seed function must be safe to re-run (it adds missing rows and updates the rest, so a
 corrected value reaches every database on the next `flask seed`) and must not commit:
@@ -26,8 +26,6 @@ from app.models import (
     db,
     FormCode,
     Frequency,
-    NewsSource,
-    NewsSourceKind,
     NicCode,
     ObligationTemplate,
     PenaltyRule,
@@ -492,24 +490,6 @@ def seed_nic_codes():
             existing.add(row["code"])
 
 
-# News sources for the regulatory monitor: (name, url, kind, enabled). Each one's
-# robots.txt was checked on 2026-09-28 and allows our bot; the scanner checks it again on
-# every run. The CBIC page is off until an admin switches it on (a busy home page).
-NEWS_SOURCES = [
-    ("TaxGuru: GST news", "https://taxguru.in/category/goods-and-service-tax/feed/", "rss", True),
-    ("TaxGuru: Income tax news", "https://taxguru.in/category/income-tax/feed/", "rss", True),
-    ("CBIC GST portal (home page)", "https://cbic-gst.gov.in/", "html", False),
-]
-
-
-def seed_news_sources():
-    for name, url, kind, enabled in NEWS_SOURCES:
-        if not db.session.scalar(select(NewsSource.id).where(NewsSource.url == url)):
-            db.session.add(
-                NewsSource(name=name, url=url, kind=NewsSourceKind(kind), enabled=enabled)
-            )
-
-
 def seed_filing_dates():
     """Give filings created earlier the dates of the rules seeded above."""
     onboarding.resync_all_filings()
@@ -522,7 +502,6 @@ SEEDS = [
     ("obligation templates", seed_obligation_templates),
     ("penalty rules", seed_penalty_rules),
     ("NIC codes", seed_nic_codes),
-    ("news sources", seed_news_sources),
     ("filings synced to the rules", seed_filing_dates),  # last: needs the templates above
 ]
 

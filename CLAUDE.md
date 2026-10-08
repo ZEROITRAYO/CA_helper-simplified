@@ -9,7 +9,6 @@ Code style:
 - Short functions, plain loops, one-line docstrings, comments only for the "why". No task ids or rule numbers.
 - Keep the JSON responses and error codes the frontend uses.
 - Commit in the route before returning. Send emails after the commit.
-- Never send PAN, GSTIN, names or document text to Gemini (utils.ask_gemini scrubs them).
 - OCR stays local. Legal thresholds and due dates come from the rule tables, never from code.
 - Frontend: plain JS, pages in pages/, all API calls in api.js.
 - Never point TEST_DATABASE_URL at Neon. Never commit .env.

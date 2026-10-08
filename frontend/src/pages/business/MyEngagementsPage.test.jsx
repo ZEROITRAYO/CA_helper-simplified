@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ENGAGEMENT_ID, engagement } from "@/test/engagementData";
 import { fakeApi, loginAs, renderApp } from "@/test/utils";
@@ -77,26 +77,19 @@ describe("business: My engagements page", () => {
 });
 
 describe("engagement card timeline", () => {
-  it("shows where a request is and when it expires", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-27T21:30:00Z") });
+  it("shows where a request is, with no expiry and a way to withdraw it", async () => {
     loginAs("business");
-    // Requested; expires at 2026-09-29T04:30Z, 31 hours after "now".
-    fakeApi({
-      "GET /api/v1/marketplace/my-engagements": [
-        200,
-        [engagement({ expires_at: "2026-09-29T04:30:00Z" })],
-      ],
-    });
+    fakeApi({ "GET /api/v1/marketplace/my-engagements": [200, [engagement()]] });
     renderApp("/business/engagements");
 
     const progress = await screen.findByRole("list", { name: "Progress" });
     expect(progress).toHaveTextContent("● Requested→ ○ Active→ ○ Completed");
     expect(within(progress).getByText(/Requested/)).toHaveAttribute("aria-current", "step");
-    expect(screen.getByText(/expires in 31 h/)).toBeInTheDocument();
-    vi.useRealTimers();
+    expect(screen.queryByText(/expires in/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Withdraw request" })).toBeInTheDocument();
   });
 
-  it("shows how a declined request ended, with no countdown", async () => {
+  it("shows how a declined request ended", async () => {
     loginAs("business");
     fakeApi({
       "GET /api/v1/marketplace/my-engagements": [200, [engagement({ status: "declined" })]],
@@ -105,15 +98,14 @@ describe("engagement card timeline", () => {
 
     const progress = await screen.findByRole("list", { name: "Progress" });
     expect(progress).toHaveTextContent("✓ Requested→ ● Declined");
-    expect(screen.queryByText(/expires in/)).not.toBeInTheDocument();
   });
 
-  it("offers to find another CA when a request expired", async () => {
+  it("offers to find another CA after withdrawing a request", async () => {
     loginAs("business");
-    fakeApi({ [`GET ${LIST_URL}`]: [200, [engagement({ status: "expired" })]] });
+    fakeApi({ [`GET ${LIST_URL}`]: [200, [engagement({ status: "cancelled" })]] });
     renderApp("/business/engagements");
 
-    expect(await screen.findByText("Expired")).toBeInTheDocument();
+    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Find another CA" })).toHaveAttribute(
       "href",
       "/business/marketplace",

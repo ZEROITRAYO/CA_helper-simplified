@@ -602,7 +602,8 @@ function RequestForm({ caId, filings }) {
           {sending ? "Sending..." : "Send request"}
         </Button>
         <p className="text-sm text-muted-foreground">
-          {nothingTicked ? "Tick at least one filing. " : ""}The CA has 48 hours to respond.
+          {nothingTicked ? "Tick at least one filing. " : ""}The CA accepts or declines it; you can
+          withdraw it until then.
         </p>
       </div>
     </div>

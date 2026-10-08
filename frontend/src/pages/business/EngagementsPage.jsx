@@ -18,7 +18,7 @@ import { Button, buttonClass } from "@/components/ui";
 const GROUPS = [
   { title: "Waiting for the CA", statuses: ["requested"] },
   { title: "Active", statuses: ["active"] },
-  { title: "Finished", statuses: ["completed", "declined", "expired", "cancelled"] },
+  { title: "Finished", statuses: ["completed", "declined", "cancelled"] },
 ];
 
 // /business/engagements: every request the business sent to a CA, grouped by status,
@@ -82,7 +82,7 @@ export function MyEngagementsPage() {
 }
 
 // The buttons the business has for one engagement: withdraw a request the CA has not
-// answered, or find another CA when one was declined or expired.
+// answered, or find another CA when one was declined or withdrawn.
 function BusinessActions({ engagement }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState(null);
@@ -108,7 +108,7 @@ function BusinessActions({ engagement }) {
         Withdraw request
       </Button>
     );
-  } else if (engagement.status === "expired" || engagement.status === "declined") {
+  } else if (engagement.status === "declined" || engagement.status === "cancelled") {
     // The CA did not take it: the filings are free, so offer to pick another CA.
     buttons = (
       <Link to="/business/marketplace" className={buttonClass()}>Find another CA</Link>

@@ -13,7 +13,7 @@ is flagged. The weights are the constants below.
 from flask import Blueprint, jsonify, request
 from sqlalchemy import select
 
-from app import alerts, compliance, documents, marketplace, onboarding, regulatory
+from app import alerts, compliance, documents, marketplace, onboarding
 from app.models import (
     DocumentRequest,
     DocumentRequestStatus,
@@ -45,7 +45,6 @@ POINTS_DUE_WITHIN_3_DAYS = 25  # the next deadline is 0 to 3 days away
 POINTS_DUE_WITHIN_7_DAYS = 10  # 4 to 7 days away
 POINTS_PER_MISSING_DOCUMENT = 5  # a required checklist entry not ticked
 POINTS_PER_OPEN_REQUEST = 3  # a document asked for and not received yet
-POINTS_PER_REGULATORY_CHANGE = 15  # a rule change affected this client (30 days)
 
 
 def request_to_dict(document_request, filing=None):
@@ -108,18 +107,7 @@ def engagement_of(user, business_id, item_id):
 # --- Urgency -----------------------------------------------------------------------------
 
 
-def regulatory_points(business_id):
-    """Urgency points for rule changes that affected the business in the last 30 days."""
-    points = []
-    for change in regulatory.active_changes_for(business_id):
-        forms = regulatory.forms_text(change.form_codes)
-        points.append(
-            {"reason": f"Regulatory update ({forms})", "points": POINTS_PER_REGULATORY_CHANGE}
-        )
-    return points
-
-
-def _urgency(filings, open_request_count, business_id, today):
+def _urgency(filings, open_request_count, today):
     """The urgency score, its reasons and the counts of one client's open filings."""
     overdue = [filing for filing in filings if filing.due_date < today]
     upcoming = sorted(
@@ -162,7 +150,6 @@ def _urgency(filings, open_request_count, business_id, today):
                 "points": open_request_count * POINTS_PER_OPEN_REQUEST,
             }
         )
-    reasons.extend(regulatory_points(business_id))
     return {
         "score": sum(reason["points"] for reason in reasons),
         "reasons": reasons,
@@ -192,7 +179,7 @@ def list_clients():
         filings = compliance.get_filings_by_ids(list(work)).values()
         not_filed = [f for f in filings if f.status not in compliance.DONE_STATUSES]
         requests = open_requests(set(work.values()), list(work))
-        urgency = _urgency(not_filed, len(requests), business_id, today)
+        urgency = _urgency(not_filed, len(requests), today)
         urgency["next_deadline"] = iso(urgency["next_deadline"])
         rows.append(
             {

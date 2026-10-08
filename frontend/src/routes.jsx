@@ -19,7 +19,6 @@ import {
   AdminCaDetailPage,
   AdminDashboardPage,
   AdminUsersPage,
-  RegulatoryAdminPage,
 } from "@/pages/admin/AdminPages";
 import { CompliancePage } from "@/pages/business/CalendarPage";
 import { BusinessDashboardPage } from "@/pages/business/DashboardPage";
@@ -32,7 +31,6 @@ import {
   RequestCaPage,
 } from "@/pages/business/FindCaPage";
 import { OnboardingPage } from "@/pages/business/OnboardingPage";
-import { RegulatoryUpdatesPage } from "@/pages/business/RegulatoryUpdatesPage";
 import { CaBatchesPage, CaClientPage, CaWorkspacePage } from "@/pages/ca/ClientsPage";
 import { CaDashboardPage } from "@/pages/ca/DashboardPage";
 import { CaEngagementsPage } from "@/pages/ca/EngagementsPage";
@@ -51,7 +49,6 @@ export const NAV = {
     { label: "Document vault", path: "/business/documents" },
     { label: "Find a CA", path: "/business/marketplace" },
     { label: "My engagements", path: "/business/engagements" },
-    { label: "Regulatory updates", path: "/business/updates" },
     { label: "Notification settings", path: "/business/settings" },
   ],
   ca: [
@@ -61,13 +58,11 @@ export const NAV = {
     { label: "My engagements", path: "/ca/engagements" },
     { label: "My clients", path: "/ca/clients" },
     { label: "Deadline batches", path: "/ca/batches" },
-    { label: "Regulatory updates", path: "/ca/updates" },
     { label: "Notification settings", path: "/ca/settings" },
   ],
   admin: [
     { label: "Dashboard", path: "/admin" },
     { label: "Users & CAs", path: "/admin/users" },
-    { label: "Regulatory news", path: "/admin/regulatory" },
   ],
 };
 
@@ -108,7 +103,6 @@ export const appRoutes = [
     { path: "marketplace/:caId", element: <CaDetailPage /> },
     { path: "marketplace/:caId/request", element: <RequestCaPage /> },
     { path: "engagements", element: <MyEngagementsPage /> },
-    { path: "updates", element: <RegulatoryUpdatesPage /> },
     { path: "settings", element: <SettingsPage /> },
   ]),
   roleArea("ca", [
@@ -119,14 +113,12 @@ export const appRoutes = [
     { path: "clients", element: <CaWorkspacePage /> },
     { path: "clients/:businessId", element: <CaClientPage /> },
     { path: "batches", element: <CaBatchesPage /> },
-    { path: "updates", element: <RegulatoryUpdatesPage /> },
     { path: "settings", element: <SettingsPage /> },
   ]),
   roleArea("admin", [
     { index: true, element: <AdminDashboardPage /> },
     { path: "users", element: <AdminUsersPage /> },
     { path: "cas/:caId", element: <AdminCaDetailPage /> },
-    { path: "regulatory", element: <RegulatoryAdminPage /> },
   ]),
   { path: "*", element: <NotFoundPage /> },
 ];

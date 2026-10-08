@@ -1,10 +1,10 @@
 """The CA marketplace: CA profiles and prices, Find a CA, requests between a business and a
-CA (accept, decline, expiry), ratings, and the access checks that decide what a CA may see
+CA (accept, decline, withdraw), ratings, and the access checks that decide what a CA may see
 of a business.
 
 Engagement lifecycle: requested -> active (the CA accepts at their listed, fixed prices);
-a request can also end declined, expired (48 hours without an answer) or cancelled (the
-business withdraws it); active -> completed. A filing is in at most one open engagement
+a request can also end declined (by the CA) or cancelled (the business withdraws it); it never
+expires on its own; active -> completed. A filing is in at most one open engagement
 (requested or active).
 
 Verification: a new profile is `pending` until an admin checks it (the Certificate of
@@ -12,7 +12,6 @@ Practice must be uploaded first). A new certificate, a changed membership or CoP
 or any save of a rejected profile sends it back to `pending`. Only verified CAs are listed.
 """
 
-from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, request
@@ -65,8 +64,6 @@ MAX_PRICE = Decimal(1000000)  # rupees; a higher price is almost certainly a typ
 OPEN_STATUSES = [EngagementStatus.REQUESTED, EngagementStatus.ACTIVE]
 # Filings in these states are done: there is nothing left for a CA to do.
 FILED_STATUSES = [ComplianceStatus.FILED, ComplianceStatus.FILED_VERIFIED]
-# A CA has this long to answer a request; then the worker marks it `expired`.
-ANSWER_WITHIN = timedelta(hours=48)
 # How many of a CA's latest reviews the CA page shows.
 REVIEWS_SHOWN = 5
 # The one catalog service that fits each ITR form, so an ITR filing is only ever priced
@@ -201,7 +198,6 @@ def engagement_to_dict(engagement):
         "ca_name": ca.user.full_name,
         "business_name": business.legal_name,
         "requested_at": iso(engagement.requested_at),
-        "expires_at": iso(engagement.expires_at),
         "responded_at": iso(engagement.responded_at),
         "activated_at": iso(engagement.activated_at),
         "completed_at": iso(engagement.completed_at),
@@ -713,7 +709,6 @@ def send_request():
         ca_profile_id=ca.id,
         status=EngagementStatus.REQUESTED,
         requested_at=now,
-        expires_at=now + ANSWER_WITHIN,
     )
     db.session.add(engagement)
     db.session.flush()  # gives engagement.id
@@ -731,7 +726,7 @@ def send_request():
         NotificationType.ENGAGEMENT_UPDATE,
         f"New request from {business.legal_name}",
         f"{business.legal_name} asked you to handle {len(chosen)} filing(s). "
-        "Answer within 48 hours.",
+        "Accept or decline it.",
         "/ca/engagements",
     )
     db.session.commit()
@@ -800,14 +795,6 @@ def check_status(engagement, expected):
         )
 
 
-def check_not_expired(engagement):
-    """409 REQUEST_EXPIRED once the 48 hours to answer have passed."""
-    if engagement.expires_at is not None and engagement.expires_at <= utcnow():
-        raise ApiError(
-            409, "REQUEST_EXPIRED", "This request expired: it was not answered within 48 hours."
-        )
-
-
 def activate(engagement, items):
     """Start the work: status `active`, and the filings are "With CA"."""
     engagement.status = EngagementStatus.ACTIVE
@@ -846,7 +833,6 @@ def accept_request(engagement_id):
     """The CA accepts at the listed prices: status `active`."""
     engagement = ca_engagement(engagement_id)
     check_status(engagement, EngagementStatus.REQUESTED)
-    check_not_expired(engagement)
     check_room(db.session.get(CaProfile, engagement.ca_profile_id), engagement.business_id)
     items = items_of(engagement)
     for item in items:
@@ -869,7 +855,6 @@ def decline_request(engagement_id):
     """The CA declines: status `declined`; the filings are free to request again."""
     engagement = ca_engagement(engagement_id)
     check_status(engagement, EngagementStatus.REQUESTED)
-    check_not_expired(engagement)
     engagement.status = EngagementStatus.DECLINED
     engagement.responded_at = utcnow()
     notify_business(
@@ -906,6 +891,14 @@ def withdraw_request(engagement_id):
     engagement = business_engagement(engagement_id)
     check_status(engagement, EngagementStatus.REQUESTED)
     engagement.status = EngagementStatus.CANCELLED
+    business = onboarding.get_business(engagement.business_id)
+    alerts.notify(
+        db.session.get(CaProfile, engagement.ca_profile_id).user,
+        NotificationType.ENGAGEMENT_UPDATE,
+        f"{business.legal_name} withdrew their request",
+        "You do not need to answer it any more.",
+        "/ca/engagements",
+    )
     db.session.commit()
     return jsonify(engagement_to_dict(engagement))
 
@@ -934,40 +927,6 @@ def rate_engagement(engagement_id):
     db.session.add(Rating(engagement_id=engagement.id, stars=stars, review=review.strip() or None))
     db.session.commit()
     return jsonify(engagement_to_dict(engagement))
-
-
-def expire_old_requests():
-    """Expire requests not answered within 48 hours; returns how many (worker job)."""
-    stmt = select(Engagement).where(
-        Engagement.status == EngagementStatus.REQUESTED, Engagement.expires_at <= utcnow()
-    )
-    expired = db.session.scalars(stmt).all()
-    for engagement in expired:
-        engagement.status = EngagementStatus.EXPIRED
-        notify_business(
-            engagement,
-            "Your CA request expired",
-            f"did not answer within 48 hours. Choose another CA for: {service_names(engagement)}.",
-        )
-    db.session.commit()
-    for engagement in expired:
-        email_business(
-            engagement,
-            "Your CA request expired",
-            "engagement_expired",
-            service_names=service_names(engagement),
-        )
-    return len(expired)
-
-
-def service_names(engagement):
-    """The services of an engagement, e.g. "GSTR-3B filing, GSTR-1 filing"."""
-    names = []
-    for item in items_of(engagement):
-        name = db.session.get(CatalogService, item.service_id).name
-        if name not in names:
-            names.append(name)
-    return ", ".join(names)
 
 
 # --- Access checks: what a CA may see of a business ----------------------------------------

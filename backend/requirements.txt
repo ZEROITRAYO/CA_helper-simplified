@@ -29,8 +29,5 @@ PyMuPDF==1.28.2
 # --- Background jobs (worker process only) ---
 APScheduler==3.11.3
 
-# --- AI (Gemini; every call goes through app/utils.py) ---
-google-genai==2.25.0
-
 # --- Tests ---
 pytest==9.1.1

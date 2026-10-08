@@ -45,7 +45,6 @@ from app.models import (
 )
 from app.seed import seed_service_catalog
 from app.utils import ApiError, require_ca_access
-from worker import build_scheduler
 
 BASE = "/api/v1/marketplace"
 _numbers = iter(range(100000, 999999))
@@ -345,9 +344,6 @@ def test_sending_a_request(client, setup, mailbox, database):
     assert prices == [("Aug 2026", "800.00"), ("Aug 2026 (GSTR-1)", "600.00")]
     assert engagement["items"][0]["agreed_price"] is None
 
-    row = database.session.get(Engagement, uuid.UUID(engagement["id"]))
-    assert row.expires_at - row.requested_at == timedelta(hours=48)
-
     # The CA is told by email.
     assert len(mailbox) == 1
     assert mailbox[0]["To"] == setup["ca_user"].email
@@ -644,55 +640,20 @@ def test_the_best_rated_come_first_then_experience_then_name(
     ]
 
 
-# --- MA12: requests nobody answers within 48 hours expire -----------------------------
+# --- MA12: a request never expires ---------------------------------------------------
 
 
-def _make_overdue(database, engagement_id):
-    """Move a request's answer deadline into the past (instead of waiting 48 hours)."""
-    row = database.session.get(Engagement, uuid.UUID(engagement_id))
-    row.expires_at = utcnow() - timedelta(minutes=1)
+def test_a_request_stays_open_until_someone_answers_it(client, setup, database):
+    engagement = request_gst(client, setup)
+    row = database.session.get(Engagement, uuid.UUID(engagement["id"]))
+    row.requested_at = utcnow() - timedelta(days=30)  # a month without an answer
     database.session.commit()
 
+    response = action(client, setup["ca_headers"], engagement["id"], "accept")
 
-def test_expire_job_expires_only_overdue_requests(client, setup, mailbox, database, make_ca):
-    overdue = request_gst(client, setup)
-    _make_overdue(database, overdue["id"])
-    # A fresh request (another CA, another business filing) must stay requested.
-    _, other_ca = make_ca({"gstr_3b": "700"}, name="Other CA")
-    mailbox.clear()
-
-    count = marketplace_service.expire_old_requests()
-
-    assert count == 1
-    database.session.expire_all()
-    assert database.session.get(Engagement, uuid.UUID(overdue["id"])).status == "expired"
-    # The business is told, with the service to look for again.
-    assert mailbox[0]["To"] == setup["owner"].email
-    assert "GSTR-3B filing" in mailbox[0].get_content()
-    # The filings are free again: another CA can be requested.
-    again = send_request(client, setup, (setup["gst_3b"], setup["catalog"]["gstr_3b"]), ca=other_ca)
-    assert again.status_code == 201
-
-
-
-@pytest.mark.parametrize("name", ["accept", "decline"])
-def test_ca_cannot_answer_after_48_hours(client, setup, database, name):
-    engagement = request_gst(client, setup)
-    _make_overdue(database, engagement["id"])
-
-    response = action(client, setup["ca_headers"], engagement["id"], name)
-
-    assert response.status_code == 409
-    assert response.get_json()["error"]["code"] == "REQUEST_EXPIRED"
-
-
-def test_worker_runs_the_expiry_job_every_15_minutes(app):
-    scheduler = build_scheduler(app)
-
-    job = scheduler.get_job("marketplace.expire_requests")
-
-    assert job is not None
-    assert job.trigger.interval == timedelta(minutes=15)
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "active"
+    assert "expires_at" not in response.get_json()
 
 
 # --- MA14: what a CA may see of a business -------------------------------------------
@@ -889,7 +850,7 @@ def test_a_new_request_reaches_the_cas_tray_and_inbox(client, setup, database, m
     assert tray(database, setup["ca_user"]) == [
         (
             "New request from Asha Traders",
-            "Asha Traders asked you to handle 2 filing(s). Answer within 48 hours.",
+            "Asha Traders asked you to handle 2 filing(s). Accept or decline it.",
             "/ca/engagements",
         )
     ]
@@ -929,15 +890,17 @@ def test_completion_reaches_the_business_tray_without_email(client, setup, datab
     assert mailbox == []
 
 
-def test_an_expired_request_reaches_the_business_tray(client, setup, database):
+def test_a_withdrawn_request_reaches_the_cas_tray(client, setup, database):
     engagement = request_gst(client, setup)
-    _make_overdue(database, engagement["id"])
 
-    marketplace_service.expire_old_requests()
+    action(client, setup["business_headers"], engagement["id"], "withdraw")
 
-    [(title, body, _)] = tray(database, setup["owner"])
-    assert title == "Your CA request expired"
-    assert "Choose another CA for: GSTR-3B filing, GSTR-1 filing." in body
+    assert tray(database, setup["ca_user"])[-1] == (
+        "Asha Traders withdrew their request",
+        "You do not need to answer it any more.",
+        "/ca/engagements",
+    )
+
 
 
 

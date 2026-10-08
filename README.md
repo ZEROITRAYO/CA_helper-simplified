@@ -18,7 +18,6 @@ Compose plugin (2.17+) on Linux. Nothing else: Python, Node, Postgres and Tesser
 1. Get the team's `.env` privately from a teammate (it has the shared Neon `DATABASE_URL`, `SECRET_KEY`,
    `JWT_SECRET_KEY` and `FIELD_ENCRYPTION_KEY`; everyone must use the same values). Starting a new database of
    your own instead: `cp .env.example .env` and fill in those four (each line says how to make it).
-   `GEMINI_API_KEY` is optional.
 2. Start everything (the first time builds the images, a few minutes):
 
 ```bash
@@ -55,12 +54,10 @@ Other commands:
 | Backend tests (they use their own database) | `docker compose exec backend pytest` |
 | Frontend tests | `docker compose exec frontend npm test` |
 | Production build check | `docker compose exec frontend npm run build` |
-| Read the news sources now | `docker compose exec backend flask --app app regulatory scan` |
 | Empty a local database and seed it again (refuses Neon) | `docker compose exec backend flask --app app reset-db` |
 | After a change to `requirements.txt` or `package.json` | `docker compose up --build` |
 
-Without `GEMINI_API_KEY` everything still works: the news monitor uses its keyword fallback (Gemini
-is used only there). The evaluation scripts for the report are in [eval/](eval/README.md).
+The app uses no AI service. The OCR evaluation for the report is in [eval/](eval/README.md).
 
 ## Demo script
 
@@ -80,9 +77,9 @@ A 10-minute walk through every flow:
 |---|---|---|
 | 0–1 | (new) `/signup` | Sign up as a business; the code arrives in Mailpit; register a business and read the "why" of each profile line |
 | 1–3 | `business@demo.local` | Dashboard: next deadline, overdue count, penalty exposure, the CA's document request in "To do". Calendar → an overdue filing (late fees) → an upcoming GSTR-3B: "How similar businesses file it" (10 micro proprietorships), the checklist with linked files, "Your CA asked for documents" (answer it from the vault). Mark a filing as filed with an acknowledgement: it becomes "Filed–verified" |
-| 3–4 | `business@demo.local` | Document vault: upload a file (a PAN card uploaded as "Other" gets a warning), open a file, try to delete an acknowledgement (refused). Find a CA (filters, prices), My engagements (completed and rated, active), Regulatory updates, Notification settings (the inbox: open a notification) |
-| 4–7 | `ca@demo.local` | My clients: three clients by urgency with "Why flagged". Asha Traders: profile, files (Open), the fulfilled request, ask for a document, **Mark as filed** with an ARN. Deadline batches: one GSTR-3B due date for three clients. My engagements: a new request (accept at the listed price or decline), declined / expired / cancelled ones |
-| 8–10 | `admin@demo.local` | Dashboard: filings by status and the overdue rate. Users & CAs: review the pending CA (Tanvi Kulkarni), open the certificate, verify. Regulatory news: the sources and **Scan now**; the changes found (those Gemini read are sent to the affected users at once) |
+| 3–4 | `business@demo.local` | Document vault: upload a file (a PAN card uploaded as "Other" gets a warning), open a file, try to delete an acknowledgement (refused). Find a CA (filters, prices), My engagements (completed and rated, active), Notification settings (the inbox: open a notification) |
+| 4–7 | `ca@demo.local` | My clients: three clients by urgency with "Why flagged". Asha Traders: profile, files (Open), the fulfilled request, ask for a document, **Mark as filed** with an ARN. Deadline batches: one GSTR-3B due date for three clients. My engagements: a new request (accept at the listed price or decline), declined / cancelled ones |
+| 8–10 | `admin@demo.local` | Dashboard: filings by status and the overdue rate. Users & CAs: review the pending CA (Tanvi Kulkarni), open the certificate, verify |
 
 ## Working in a team
 

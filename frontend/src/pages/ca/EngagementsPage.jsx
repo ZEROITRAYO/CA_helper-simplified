@@ -4,7 +4,6 @@ import { useState } from "react";
 import { CA_ENGAGEMENTS_KEY, engagementAction, errorMessage, useCaEngagements } from "@/api";
 import { EngagementCard, QueryStatus } from "@/components/shared";
 import { Button } from "@/components/ui";
-import { isPast } from "@/lib";
 
 // --- CaEngagementsPage -------------------------------------------------------------------------
 
@@ -12,7 +11,7 @@ import { isPast } from "@/lib";
 const GROUPS = [
   { title: "New requests", statuses: ["requested"] },
   { title: "Active", statuses: ["active"] },
-  { title: "Finished", statuses: ["completed", "declined", "expired", "cancelled"] },
+  { title: "Finished", statuses: ["completed", "declined", "cancelled"] },
 ];
 
 // /ca/engagements: every request businesses sent to this CA, grouped by status, with
@@ -74,18 +73,8 @@ function CaActions({ engagement }) {
     setBusy(false);
   }
 
-  // After 48 hours the CA can no longer answer; the worker will close the request.
-  const answerTimeOver =
-    engagement.status === "requested" && engagement.expires_at && isPast(engagement.expires_at);
-
   let buttons = null;
-  if (answerTimeOver) {
-    buttons = (
-      <p className="text-muted-foreground">
-        The 48 hours to answer are over. This request will close automatically.
-      </p>
-    );
-  } else if (engagement.status === "requested") {
+  if (engagement.status === "requested") {
     buttons = (
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => run("accept")} disabled={busy}>
