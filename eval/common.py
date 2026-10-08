@@ -17,9 +17,9 @@ if str(BACKEND) not in sys.path:
 
 def app_context():
     """An app context of the development app (the database from .env)."""
-    from app import create_app
+    from app import app
 
-    return create_app().app_context()
+    return app.app_context()
 
 
 def percent(hits: int, total: int) -> str:

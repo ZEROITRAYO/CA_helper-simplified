@@ -33,12 +33,12 @@ services:
 
   backend:
     <<: *backend
-    command: python main.py
+    command: flask --app app run --host 0.0.0.0 --port 8000 --debug
     ports: ["8000:8000"]
 
   worker:
     <<: *backend
-    command: python worker.py
+    command: python reminders.py
     profiles: ["worker"]
 
   frontend:

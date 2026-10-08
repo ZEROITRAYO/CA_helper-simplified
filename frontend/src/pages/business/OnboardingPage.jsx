@@ -104,7 +104,7 @@ export function OnboardingPage() {
 const AMOUNT = /^[0-9]+(\.[0-9]{1,2})?$/; // rupees, e.g. 4500000 or 4500000.50
 const GSTIN_FORMAT = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
 
-// The same rules as the checks in backend/app/onboarding.py.
+// The same rules as the checks in backend/routes_business.py.
 // `states` is [{name, code}]: the state must be one of them, and a GSTIN must fit it.
 function makeSchema(states) {
   const codeOf = Object.fromEntries(states.map((state) => [state.name, state.code]));

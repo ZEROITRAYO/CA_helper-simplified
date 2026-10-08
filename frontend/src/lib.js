@@ -248,7 +248,7 @@ export function monthLabel(isoDate) {
 // --- gstin -------------------------------------------------------------------------------------
 
 /**
- * GSTIN checks, the same as backend/app/utils.py (and the same messages).
+ * GSTIN checks, the same as backend/helpers.py (and the same messages).
  *
  *   gstinError("27ABCDE1234F1Z0", "ABCDE1234F", "27")   -> null (fine)
  *

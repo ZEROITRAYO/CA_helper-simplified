@@ -15,8 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common import percent, print_table  # noqa: E402
 
-from app import ocr
-from app.ocr import read_proof_fields, read_registration
+import ocr
+from ocr import read_proof_fields, read_registration
 
 HERE = Path(__file__).parent
 # The samples' dates are in 2026; a later "today" keeps every one of them valid.
@@ -71,7 +71,7 @@ def main() -> None:
         mime_type = "image/png" if path.suffix == ".png" else "application/pdf"
         try:
             found = _found(ocr.extract_text(data, mime_type))
-        except ocr.OcrError as error:
+        except ValueError as error:
             found = {}
             misses.append([path.stem, "(whole file)", "", str(error)])
         file_format = _format_of(path, data)

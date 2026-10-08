@@ -4,6 +4,25 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-08: The backend rewritten in beginner style
+
+**What** (every feature and the API stay the same; the frontend is unchanged)
+- Plain Flask: `app.py` makes the app and imports `routes_auth.py`, `routes_business.py`, `routes_documents.py`,
+  `routes_marketplace.py`, `routes_ca.py` and `routes_admin.py`, which use `@app.route` (no Blueprints, no app
+  factory). `models.py` has the tables, `helpers.py` the small shared helpers, `filings.py` the filing rules,
+  `ocr.py` the local OCR, `seed.py` and `reminders.py` are scripts.
+- No migrations: `db.create_all()` makes missing tables when the app starts. The tables are the same, so the
+  team's Neon database keeps its data. Flask-Migrate and APScheduler are no longer needed.
+- Routes return errors directly (`return error(404, "CODE", "message")`) instead of raising exceptions; a 422
+  says what is wrong in `message` (no per-field `details`).
+- Plain strings instead of enums; no classes except the tables.
+- 25 tests that use the API like the frontend does replace the ~490 tests of internal functions.
+- Checked against the old backend on a copy of the demo data: the same answers for 119 read requests and 55 actions
+  (only the wording of some 422 messages differs), and the same emails.
+
+**Why:** the team must be able to explain every line; the old code read like an industry codebase.
+
+
 ## 2026-10-08: A smaller, first-year-style backend
 
 **What** (no feature or page changed)

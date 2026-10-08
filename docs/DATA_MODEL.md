@@ -1,8 +1,8 @@
 # Data model
 
-Every table is a class in `backend/app/models.py`; the schema is built by the one migration in
-`backend/migrations/versions/` (`flask --app app db upgrade`). A change to a model needs a new migration
-(`flask --app app db migrate -m "<table>: <change>"`, checked by hand) and an update of this file.
+Every table is a class in `backend/models.py`. `db.create_all()` (when the backend starts) makes a table that does
+not exist yet; it never changes an existing table. A change to a column is made by hand on the shared database (an
+`ALTER TABLE`, agreed with the team) and in models.py, and noted in this file.
 
 ## Rules for every table
 
@@ -88,8 +88,7 @@ Column types are in `models.py`; this lists what each table is for and its key f
 
 ### Regulatory (unused)
 `news_sources`, `news_articles`, `regulatory_changes` and `regulatory_change_matches` stay in the database but
-nothing uses them since the news monitor was removed (8 Oct 2026); `migrations/env.py` tells `flask db check` to
-ignore them.
+nothing uses them since the news monitor was removed (8 Oct 2026). They are not in models.py.
 
 **Removed in the simplification:** `pro_bono_requests` and the quote and pro-bono columns (removed on 7 Oct 2026), `kb_chunks` and `chat_messages` (the AI assistant, removed on 6 Oct 2026), `client_invites`, `ca_notes`, `notification_settings` (replaced by
 `users.email_notifications`) and `admin_audit_log`; the columns `users.is_active`, `email_otps.attempts`,
@@ -266,7 +265,7 @@ Lifecycle: `requested → active`; a request can end `declined` or `cancelled` (
 
 ## Access rules
 
-Who may read what. Every route checks it with `roles_required` / `login_required` (`backend/app/utils.py`) and the
+Who may read what. Every route checks it with `@role_required(...)` (`backend/helpers.py`) and the
 functions below; the database stores no permissions.
 
 | Who | May read |
@@ -277,13 +276,11 @@ functions below; the database stores no permissions.
 | A CA after the engagement is `completed`, `declined` or `cancelled` | nothing of that business, except the rating of their own engagement |
 | An admin | metadata, **never document contents** |
 
-The functions that decide a CA's access (in `backend/app/marketplace.py`):
-- `ca_can_see_business(ca_profile_id, business_id)`: true while an engagement between them is `active`.
-- `active_filing_ids(ca_profile_id, business_id)`: the filings in the CA's active engagements with that business
-  (a business may have two CAs, e.g. one for GST and one for ITR; each sees only their own).
-- `ca_can_open_document(ca_profile_id, document_id)`: true only for a document of a filing in one of the CA's
+Where a CA's access is decided:
+- `my_work()` in `backend/routes_ca.py`: the filings of the CA's active engagements, by business (a business may
+  have two CAs, e.g. one for GST and one for ITR; each sees only their own). A business that is not in it answers
+  404 `BUSINESS_NOT_FOUND`, so a CA cannot even find out that a business exists.
+- `open_document()` in `backend/routes_documents.py`: a CA may open only a document of a filing in one of their
   active engagements (a linked file or the filing's acknowledgement).
-- `require_ca_access(business_id)` in `backend/app/utils.py`: stops a route with 404 `BUSINESS_NOT_FOUND` unless
-  the logged-in CA has active access, so a CA cannot even find out that a business exists.
 - **Capacity:** a CA with as many active clients as `capacity` is hidden from Find a CA and gets no new clients
   (409 `CA_AT_CAPACITY`).
