@@ -158,6 +158,11 @@ export function label(labels, code) {
   return labels[code] ?? code;
 }
 
+/** Several codes as one line, e.g. "English, Hindi". */
+export function labelList(labels, codes) {
+  return codes.map((code) => label(labels, code)).join(", ");
+}
+
 // --- money -------------------------------------------------------------------------------------
 
 /** Rupee amounts: formatRupees("2500.00") -> "₹2,500". */

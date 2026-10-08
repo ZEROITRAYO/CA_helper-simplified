@@ -1,4 +1,7 @@
+// Pieces several pages use: query status, errors, cards, fields, tables, CA facts, engagements.
+import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { Link } from "react-router";
 
 import { errorMessage } from "@/api";
 import {
@@ -11,8 +14,11 @@ import {
   CardTitle,
   Input,
   Label,
+  linkClass,
 } from "@/components/ui";
 import {
+  CA_SPECIALIZATION_LABELS,
+  cn,
   COMPLIANCE_STATUS_LABELS,
   ENGAGEMENT_STATUS_LABELS,
   filingFormLabel,
@@ -22,43 +28,192 @@ import {
   label,
 } from "@/lib";
 
-// --- QueryStatus ---------------------------------------------------------------------------------
+// --- Hooks -------------------------------------------------------------------------------------
 
-/** "Loading..." while a query waits, its error message if it failed, else nothing. */
-export function QueryStatus({ query }) {
-  if (query.isPending) return <p className="text-sm text-muted-foreground">Loading...</p>;
-  if (query.isError) {
-    return (
-      <p role="alert" className="text-sm text-destructive">
-        {errorMessage(query.error)}
-      </p>
-    );
+/**
+ * Busy and error state for a button or form. run(async () => ...) clears the error, shows
+ * the API's message if the action fails, and returns true when it worked.
+ */
+export function useAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function run(action) {
+    setError(null);
+    setBusy(true);
+    try {
+      await action();
+      return true;
+    } catch (failure) {
+      setError(errorMessage(failure));
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
-  return null;
+
+  return { busy, error, setError, run };
 }
 
-// --- Pager ---------------------------------------------------------------------------------------
+/** A local link to a downloaded file (a Blob); freed again when the page closes. */
+export function useObjectUrl(blob) {
+  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
+  useEffect(() => () => url && URL.revokeObjectURL(url), [url]);
+  return url;
+}
 
-/** Previous / Next buttons for a paginated API answer ({ page, page_size, total }). */
-export function Pager({ data, onPage }) {
-  const pages = Math.max(1, Math.ceil(data.total / data.page_size));
-  if (pages === 1) return null;
+// --- Messages ----------------------------------------------------------------------------------
+
+/** An error message (nothing when there is none). */
+export function ErrorText({ children, className }) {
+  if (!children) return null;
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <Button variant="outline" disabled={data.page <= 1} onClick={() => onPage(data.page - 1)}>
-        Previous
-      </Button>
-      <span>
-        Page {data.page} of {pages}
-      </span>
-      <Button variant="outline" disabled={data.page >= pages} onClick={() => onPage(data.page + 1)}>
-        Next
-      </Button>
+    <p role="alert" className={cn("text-sm text-destructive", className)}>
+      {children}
+    </p>
+  );
+}
+
+/** A short "done" message (nothing when there is none). */
+export function Notice({ children }) {
+  if (!children) return null;
+  return (
+    <p role="status" className="text-sm text-muted-foreground">
+      {children}
+    </p>
+  );
+}
+
+/** "Loading..." while a query (or any of a list of queries) waits, else its error, else nothing. */
+export function QueryStatus({ query }) {
+  const queries = [].concat(query);
+  if (queries.some((one) => one.isPending)) {
+    return <p className="text-sm text-muted-foreground">Loading...</p>;
+  }
+  const failed = queries.find((one) => one.isError);
+  return failed ? <ErrorText>{errorMessage(failed.error)}</ErrorText> : null;
+}
+
+// --- Page parts --------------------------------------------------------------------------------
+
+/** A page's heading, with an optional line under it. */
+export function PageTitle({ title, children }) {
+  return (
+    <div className="space-y-1">
+      <h1 className="text-2xl font-semibold">{title}</h1>
+      {children && <p className="text-sm text-muted-foreground">{children}</p>}
     </div>
   );
 }
 
-// --- FormField ---------------------------------------------------------------------------------
+/** A dashboard's heading: the API's welcome message, or why it could not be loaded. */
+export function Welcome({ query }) {
+  let title = "Loading...";
+  if (query.isError) title = "Dashboard";
+  if (query.isSuccess) title = query.data.message;
+  return (
+    <>
+      <h1 className="text-2xl font-semibold">{title}</h1>
+      {query.isError && (
+        <Section title="Could not load the dashboard" description={errorMessage(query.error)} />
+      )}
+    </>
+  );
+}
+
+/** A dashboard card with one big number (red when `alert`); `note` and `children` go under it. */
+export function NumberCard({ title, value, note, alert, children }) {
+  return (
+    <Card className={alert ? "ring-red-300" : undefined}>
+      <CardHeader>
+        <CardDescription>{title}</CardDescription>
+        <CardTitle className={cn("text-2xl tabular-nums", alert && "text-red-700")}>{value}</CardTitle>
+        {note && <p className="text-xs text-muted-foreground">{note}</p>}
+        {children}
+      </CardHeader>
+    </Card>
+  );
+}
+
+/** A card with a title, an optional description and optional content. */
+export function Section({ title, description, contentClassName, children, ...cardProps }) {
+  return (
+    <Card {...cardProps}>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      {children && <CardContent className={contentClassName}>{children}</CardContent>}
+    </Card>
+  );
+}
+
+/** "← Back to ..." at the top of a page. */
+export function BackLink({ to, children }) {
+  return (
+    <Link to={to} className={cn("text-sm", linkClass)}>
+      ← {children}
+    </Link>
+  );
+}
+
+/** For a business that has not registered yet: a link to the form and why. */
+export function RegisterFirst({ children }) {
+  return (
+    <p className="text-sm">
+      <Link to="/business/onboarding" className="underline">
+        Register your business
+      </Link>{" "}
+      {children}
+    </p>
+  );
+}
+
+/** A table with a header row; the rows are <Row>s. */
+export function Table({ headers, children }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="border-b text-muted-foreground">
+          <tr>
+            {headers.map((header, index) => (
+              <th key={index} className={cn("py-2 font-medium", index < headers.length - 1 && "pr-4")}>
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+/** One table row; `cells` are what each column shows. */
+export function Row({ cells }) {
+  return (
+    <tr className="border-b align-top">
+      {cells.map((cell, index) => (
+        <td key={index} className={cn("py-2", index < cells.length - 1 && "pr-4")}>
+          {cell}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// --- Form fields -------------------------------------------------------------------------------
+
+/** A label above a control (a select, a file input...) and its error. */
+export function Field({ id, label, error, className = "space-y-2", children }) {
+  return (
+    <div className={className}>
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+      {error && <p className="text-sm text-destructive">{error.message}</p>}
+    </div>
+  );
+}
 
 /** A labelled input with its error (linked for screen readers), for React Hook Form. */
 export function FormField({ id, label, error, hint, ...inputProps }) {
@@ -78,6 +233,56 @@ export function FormField({ id, label, error, hint, ...inputProps }) {
       ) : (
         hint && <p className="text-xs text-muted-foreground">{hint}</p>
       )}
+    </div>
+  );
+}
+
+/** The props of a React Hook Form field: <FormField label="Email" {...field(form, "email")} />. */
+export function field(form, name) {
+  return { id: name, error: form.formState.errors[name], ...form.register(name) };
+}
+
+/** An <option> per code of a label map (or only `codes`), after an optional empty choice. */
+export function Options({ labels, codes = Object.keys(labels), empty }) {
+  return (
+    <>
+      {empty !== undefined && <option value="">{empty}</option>}
+      {codes.map((code) => (
+        <option key={code} value={code}>
+          {label(labels, code)}
+        </option>
+      ))}
+    </>
+  );
+}
+
+/** A checkbox or radio button with its text. */
+export function Choice({ id, type = "checkbox", text, ...inputProps }) {
+  return (
+    <label htmlFor={id} className="flex items-center gap-2 text-sm">
+      <input id={id} type={type} {...inputProps} />
+      {text}
+    </label>
+  );
+}
+
+// --- Pager ---------------------------------------------------------------------------------------
+
+/** Previous / Next buttons for a paginated API answer ({ page, page_size, total }). */
+export function Pager({ data, onPage }) {
+  const pages = Math.max(1, Math.ceil(data.total / data.page_size));
+  if (pages === 1) return null;
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <Button variant="outline" disabled={data.page <= 1} onClick={() => onPage(data.page - 1)}>
+        Previous
+      </Button>
+      <span>
+        Page {data.page} of {pages}
+      </span>
+      <Button variant="outline" disabled={data.page >= pages} onClick={() => onPage(data.page + 1)}>
+        Next
+      </Button>
     </div>
   );
 }
@@ -120,40 +325,50 @@ export function StatusBadge({ status }) {
   );
 }
 
-// --- Stars -------------------------------------------------------------------------------------
+// --- A CA's facts ------------------------------------------------------------------------------
 
-/** Star ratings: <Stars stars={4} /> and <RatingSummary average={4.5} count={12} />. */
-
-// Five characters: filled stars first, then empty ones, e.g. 3 -> "★★★☆☆".
-function starText(stars) {
-  let text = "";
-  for (let i = 1; i <= 5; i++) {
-    if (i <= stars) {
-      text = text + "★";
-    } else {
-      text = text + "☆";
-    }
-  }
-  return text;
+/** "Pune · 8 years of experience · ICAI no. 123456" */
+export function caFacts(ca) {
+  const years = ca.years_experience === 1 ? "year" : "years";
+  return `${ca.city} · ${ca.years_experience} ${years} of experience · ICAI no. ${ca.membership_no}`;
 }
 
+/** The CA's specializations as badges. */
+export function SpecializationBadges({ codes }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {codes.map((code) => (
+        <Badge key={code} variant="outline">
+          {label(CA_SPECIALIZATION_LABELS, code)}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+export function VerifiedBadge() {
+  return <Badge className="bg-green-100 text-green-700">Verified</Badge>;
+}
+
+// --- Stars -------------------------------------------------------------------------------------
+
+/** 3 -> "★★★☆☆" */
 export function Stars({ stars }) {
   return (
     <span className="text-amber-500" role="img" aria-label={stars + " out of 5 stars"}>
-      {starText(stars)}
+      {"★".repeat(stars) + "☆".repeat(5 - stars)}
     </span>
   );
 }
 
-// A CA's average rating and how many ratings it is based on.
+/** A CA's average rating and how many ratings it is based on. */
 export function RatingSummary({ average, count }) {
   if (!count) {
     return <span className="text-muted-foreground">No ratings yet</span>;
   }
-  const word = count === 1 ? "rating" : "ratings";
   return (
     <span>
-      <span className="text-amber-500">★</span> {average} ({count} {word})
+      <span className="text-amber-500">★</span> {average} ({count} {count === 1 ? "rating" : "ratings"})
     </span>
   );
 }
@@ -191,7 +406,7 @@ export function Markdown({ children }) {
   );
 }
 
-// --- EngagementCard ----------------------------------------------------------------------------
+// --- Engagements -------------------------------------------------------------------------------
 
 // Badge colour for each engagement status.
 const STATUS_COLORS = {
@@ -202,48 +417,10 @@ const STATUS_COLORS = {
   cancelled: "bg-gray-100 text-gray-700",
 };
 
-// Adds up the (fixed, listed) prices of all filings.
-function total(items) {
-  let sum = 0;
-  for (const item of items) {
-    sum = sum + Number(item.listed_price);
-  }
-  return sum;
-}
-
-// The steps shown for each status, e.g. Requested → Active → Completed.
-function stepsFor(status) {
-  if (status === "declined" || status === "cancelled") {
-    return ["requested", status];
-  }
-  return ["requested", "active", "completed"];
-}
-
-// How a step looks: bold for the current one, grey for done ones, lighter for the rest.
-function stepClass(index, current) {
-  if (index === current) {
-    return "font-semibold";
-  }
-  if (index < current) {
-    return "text-muted-foreground";
-  }
-  return "text-muted-foreground/60";
-}
-
-// ✓ for a done step, ● for the current one, ○ for one still to come.
-function stepMark(index, current) {
-  if (index < current) {
-    return "✓ ";
-  }
-  if (index === current) {
-    return "● ";
-  }
-  return "○ ";
-}
-
 /** Where the engagement is: ✓ done steps, ● the current one (bold), ○ steps still to come. */
 function Timeline({ status }) {
-  const steps = stepsFor(status);
+  const ended = status === "declined" || status === "cancelled";
+  const steps = ended ? ["requested", status] : ["requested", "active", "completed"];
   const current = steps.indexOf(status);
   return (
     <ol aria-label="Progress" className="flex flex-wrap items-center gap-1 text-xs">
@@ -251,10 +428,14 @@ function Timeline({ status }) {
         <li
           key={step}
           aria-current={index === current ? "step" : undefined}
-          className={stepClass(index, current)}
+          className={cn(
+            index === current && "font-semibold",
+            index < current && "text-muted-foreground",
+            index > current && "text-muted-foreground/60",
+          )}
         >
           {index > 0 && <span aria-hidden="true">→ </span>}
-          {stepMark(index, current)}
+          {index < current ? "✓ " : index === current ? "● " : "○ "}
           {label(ENGAGEMENT_STATUS_LABELS, step)}
         </li>
       ))}
@@ -263,8 +444,9 @@ function Timeline({ status }) {
 }
 
 /** One engagement as a card; `children` are the action buttons for its status. */
-export function EngagementCard({ engagement, title, children }) {
+function EngagementCard({ engagement, title, children }) {
   const items = engagement.items;
+  const total = items.reduce((sum, item) => sum + Number(item.listed_price), 0);
 
   return (
     <Card>
@@ -275,9 +457,7 @@ export function EngagementCard({ engagement, title, children }) {
             {label(ENGAGEMENT_STATUS_LABELS, engagement.status)}
           </Badge>
         </CardTitle>
-        <CardDescription>
-          Requested {formatDateTime(engagement.requested_at)}
-        </CardDescription>
+        <CardDescription>Requested {formatDateTime(engagement.requested_at)}</CardDescription>
         <Timeline status={engagement.status} />
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
@@ -298,10 +478,7 @@ export function EngagementCard({ engagement, title, children }) {
                     : "Removed filing"}{" "}
                   {item.period_label}
                   {item.due_date && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      · due {formatDate(item.due_date)}
-                    </span>
+                    <span className="text-muted-foreground"> · due {formatDate(item.due_date)}</span>
                   )}
                 </td>
                 <td className="py-1 pr-3">{item.service_name}</td>
@@ -314,7 +491,7 @@ export function EngagementCard({ engagement, title, children }) {
               <td className="py-1 pr-3" colSpan={2}>
                 Total
               </td>
-              <td className="py-1">{formatRupees(total(items))}</td>
+              <td className="py-1">{formatRupees(total)}</td>
             </tr>
           </tfoot>
         </table>
@@ -329,4 +506,30 @@ export function EngagementCard({ engagement, title, children }) {
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * Engagements in three groups (waiting, active, finished), each as a card titled
+ * titleOf(engagement) with actions(engagement) as its buttons.
+ */
+export function EngagementGroups({ engagements, waitingTitle, titleOf, actions }) {
+  const groups = [
+    [waitingTitle, ["requested"]],
+    ["Active", ["active"]],
+    ["Finished", ["completed", "declined", "cancelled"]],
+  ];
+  return groups.map(([title, statuses]) => {
+    const inGroup = engagements.filter((engagement) => statuses.includes(engagement.status));
+    if (inGroup.length === 0) return null;
+    return (
+      <section key={title} className="space-y-3">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {inGroup.map((engagement) => (
+          <EngagementCard key={engagement.id} engagement={engagement} title={titleOf(engagement)}>
+            {actions(engagement)}
+          </EngagementCard>
+        ))}
+      </section>
+    );
+  });
 }

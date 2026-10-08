@@ -25,6 +25,9 @@ export function buttonClass(variant = "default", size = "default", className = "
   );
 }
 
+/** A text link in the app's colour. */
+export const linkClass = "text-primary underline-offset-4 hover:underline";
+
 export function Button({ className, variant = "default", size = "default", ...props }) {
   return <button className={buttonClass(variant, size, className)} {...props} />;
 }
@@ -60,7 +63,23 @@ export function CardContent({ className, ...props }) {
   return <div className={cn("px-4", className)} {...props} />;
 }
 
-// --- input and label ---------------------------------------------------------------------------
+// --- input, select, textarea and label ---------------------------------------------------------
+
+const FIELD_FOCUS =
+  "rounded-lg border border-input bg-transparent text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+export function Select({ className, ...props }) {
+  return <select className={cn("h-8 w-full px-2", FIELD_FOCUS, className)} {...props} />;
+}
+
+export function Textarea({ className, ...props }) {
+  return (
+    <textarea
+      className={cn("w-full px-2.5 py-1.5 aria-invalid:border-destructive", FIELD_FOCUS, className)}
+      {...props}
+    />
+  );
+}
 
 export function Input({ className, ...props }) {
   return (

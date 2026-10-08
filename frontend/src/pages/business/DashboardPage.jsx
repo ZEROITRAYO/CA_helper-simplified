@@ -1,14 +1,13 @@
 import { Link } from "react-router";
 
 import {
-  errorMessage,
   useComplianceDashboard,
   useFilings,
   useMyDocumentRequests,
   useMyEngagements,
   usePenaltyExposure,
 } from "@/api";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui";
+import { NumberCard, RegisterFirst, Welcome } from "@/components/shared";
 import { daysLeftText, daysUntil, filingFormLabel, formatDate, formatRupees } from "@/lib";
 
 const DONE = ["filed", "filed_verified"];
@@ -21,38 +20,11 @@ export function BusinessDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">
-        {dashboard.isPending
-          ? "Loading..."
-          : dashboard.isError
-            ? "Dashboard"
-            : dashboard.data.message}
-      </h1>
-      {dashboard.isError && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Could not load the dashboard</CardTitle>
-            <CardDescription>{errorMessage(dashboard.error)}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-      {filings.isSuccess && filings.data === null && (
-        <p className="text-sm">
-          <Link to="/business/onboarding" className="underline">
-            Register your business
-          </Link>{" "}
-          to see your filings and deadlines here.
-        </p>
-      )}
-      {dashboard.isSuccess && dashboard.data.registered && <Numbers numbers={dashboard.data} />}
-      {dashboard.isSuccess && dashboard.data.registered && dashboard.data.overdue > 0 && (
-        <PenaltyExposure />
-      )}
-      {filings.isSuccess && filings.data !== null && (
-        <>
-          <ToDo filings={filings.data} engagements={engagements.data || []} />
-        </>
-      )}
+      <Welcome query={dashboard} />
+      {filings.data === null && <RegisterFirst>to see your filings and deadlines here.</RegisterFirst>}
+      {dashboard.data?.registered && <Numbers numbers={dashboard.data} />}
+      {dashboard.data?.registered && dashboard.data.overdue > 0 && <PenaltyExposure />}
+      {filings.data && <ToDo filings={filings.data} engagements={engagements.data || []} />}
     </div>
   );
 }
@@ -86,41 +58,14 @@ function Numbers({ numbers }) {
 // The late fees of the overdue filings (GET /alerts/penalties); interest is not included.
 function PenaltyExposure() {
   const exposure = usePenaltyExposure(true);
-  if (!exposure.isSuccess) {
-    return null;
-  }
+  if (!exposure.isSuccess) return null;
   const data = exposure.data;
-  let value = "Not available yet";
-  if (data.estimated_count > 0) {
-    value = formatRupees(data.total_late_fees);
-  }
+  const value = data.estimated_count > 0 ? formatRupees(data.total_late_fees) : "Not available yet";
   let note = "late fees of your overdue filings (interest not included)";
   if (data.pending_count > 0) {
     note += `; ${data.pending_count} of ${data.overdue_count} have no confirmed rule yet`;
   }
-  return (
-    <Card className="ring-red-300">
-      <CardHeader>
-        <CardDescription>Penalty exposure · {data.label}</CardDescription>
-        <CardTitle className="text-2xl text-red-700 tabular-nums">{value}</CardTitle>
-        <p className="text-xs text-muted-foreground">{note}</p>
-      </CardHeader>
-    </Card>
-  );
-}
-
-function NumberCard({ title, value, note, alert }) {
-  return (
-    <Card className={alert ? "ring-red-300" : undefined}>
-      <CardHeader>
-        <CardDescription>{title}</CardDescription>
-        <CardTitle className={"text-2xl tabular-nums" + (alert ? " text-red-700" : "")}>
-          {value}
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">{note}</p>
-      </CardHeader>
-    </Card>
-  );
+  return <NumberCard title={"Penalty exposure · " + data.label} value={value} note={note} alert />;
 }
 
 function ToDo({ filings, engagements }) {

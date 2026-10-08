@@ -1,10 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import {
   CA_WORKSPACE_KEY,
   chooseFilingPath,
+  DASHBOARD_KEY,
   DOCUMENTS_KEY,
   downloadDocument,
   errorMessage,
@@ -25,18 +26,22 @@ import {
   useMyEngagements,
   usePeerInsights,
   usePenaltyEstimate,
+  useRefresh,
 } from "@/api";
-import { FormField, Markdown, QueryStatus, StatusBadge } from "@/components/shared";
 import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-} from "@/components/ui";
+  BackLink,
+  ErrorText,
+  Field,
+  FormField,
+  Markdown,
+  Options,
+  QueryStatus,
+  Section,
+  StatusBadge,
+  useAction,
+  useObjectUrl,
+} from "@/components/shared";
+import { Button, Card, CardContent, CardDescription, CardHeader, Input, Select } from "@/components/ui";
 import {
   daysLeftText,
   daysUntil,
@@ -55,27 +60,24 @@ const OPEN_FOR_BUSINESS = ["upcoming", "docs_pending", "ready", "overdue"];
 const FILED = ["filed", "filed_verified"];
 // Engagement statuses in which a CA request or CA work is still going on.
 const OPEN_ENGAGEMENTS = ["requested", "active"];
-const SELECT_CLASS =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+const FILE_TYPES = ".pdf,.jpg,.jpeg,.png";
 
 /** /business/compliance/:itemId: one filing, its checklist, how to file it, mark filed. */
 export function FilingPage() {
   const { itemId } = useParams();
   const filing = useFiling(itemId);
   const queryClient = useQueryClient();
+  const refresh = useRefresh();
 
   // Every action returns the updated filing: show it at once, and refresh the lists.
   function showUpdated(updated) {
     queryClient.setQueryData(filingKey(itemId), updated);
-    queryClient.invalidateQueries({ queryKey: FILINGS_KEY });
-    queryClient.invalidateQueries({ queryKey: ["compliance", "dashboard"] });
+    refresh(FILINGS_KEY, DASHBOARD_KEY);
   }
 
   return (
     <div className="max-w-3xl space-y-6">
-      <Link to="/business/compliance" className="text-sm text-muted-foreground hover:underline">
-        ← Compliance calendar
-      </Link>
+      <BackLink to="/business/compliance">Compliance calendar</BackLink>
       <QueryStatus query={filing} />
       {filing.isSuccess && (
         <>
@@ -111,14 +113,12 @@ function Header({ page }) {
 
 // --- What being late may cost --------------------------------------------------------------
 
-// Shown on every penalty figure: the rules are not checked against official sources yet.
-const PENDING_LABEL = "Estimate (rules pending verification)";
-
 function Penalty({ item }) {
   const [taxDue, setTaxDue] = useState("");
   // The amount the estimate was last asked for (only on "Estimate", not on every key).
   const [askedTaxDue, setAskedTaxDue] = useState("");
   const estimate = usePenaltyEstimate(item.id, askedTaxDue, true);
+  const amount = (value) => (value === null ? "not available" : formatRupees(value));
 
   function onSubmit(event) {
     event.preventDefault();
@@ -126,52 +126,41 @@ function Penalty({ item }) {
   }
 
   return (
-    <Card className="ring-red-300">
-      <CardHeader>
-        <CardTitle>Late fees and interest</CardTitle>
-        <CardDescription>{estimate.data?.label ?? PENDING_LABEL}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {estimate.isPending && <p className="text-muted-foreground">Loading...</p>}
-        {estimate.isError && (
-          <p role="alert" className="text-destructive">
-            {errorMessage(estimate.error)}
-          </p>
-        )}
-        {estimate.isSuccess && <PenaltyFigures estimate={estimate.data} />}
-        <form className="flex flex-wrap items-end gap-2" onSubmit={onSubmit}>
-          <FormField
-            id="tax_due"
-            label="Tax due (₹, optional, for the interest)"
-            inputMode="decimal"
-            value={taxDue}
-            onChange={(event) => setTaxDue(event.target.value)}
-          />
-          <Button type="submit" variant="outline">
-            Estimate
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PenaltyFigures({ estimate }) {
-  const amount = (value) => (value === null ? "not available" : formatRupees(value));
-  return (
-    <div className="space-y-1">
-      <p>{estimate.days_late} days late.</p>
-      <p>Late fee: {amount(estimate.late_fee)}</p>
-      <p>Interest: {amount(estimate.interest)}</p>
-      {estimate.total !== null && (
-        <p className="font-medium">Total: {formatRupees(estimate.total)}</p>
+    <Section
+      title="Late fees and interest"
+      description={estimate.data?.label ?? "Estimate (rules pending verification)"}
+      className="ring-red-300"
+      contentClassName="space-y-3 text-sm"
+    >
+      <QueryStatus query={estimate} />
+      {estimate.isSuccess && (
+        <div className="space-y-1">
+          <p>{estimate.data.days_late} days late.</p>
+          <p>Late fee: {amount(estimate.data.late_fee)}</p>
+          <p>Interest: {amount(estimate.data.interest)}</p>
+          {estimate.data.total !== null && (
+            <p className="font-medium">Total: {formatRupees(estimate.data.total)}</p>
+          )}
+          {estimate.data.notes.map((note) => (
+            <p key={note} className="text-muted-foreground">
+              {note}
+            </p>
+          ))}
+        </div>
       )}
-      {estimate.notes.map((note) => (
-        <p key={note} className="text-muted-foreground">
-          {note}
-        </p>
-      ))}
-    </div>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={onSubmit}>
+        <FormField
+          id="tax_due"
+          label="Tax due (₹, optional, for the interest)"
+          inputMode="decimal"
+          value={taxDue}
+          onChange={(event) => setTaxDue(event.target.value)}
+        />
+        <Button type="submit" variant="outline">
+          Estimate
+        </Button>
+      </form>
+    </Section>
   );
 }
 
@@ -190,116 +179,84 @@ function HowToFile({ page, onUpdated }) {
   if (FILED.includes(item.status)) {
     return <Filed page={page} onUpdated={onUpdated} />;
   }
-  if (engagement || item.status === "with_ca") {
-    let text = "A CA is working on this filing. They will mark it as filed.";
-    if (engagement && engagement.status === "active") {
-      text = `${engagement.ca_name} is working on this filing. They will mark it as filed.`;
-    } else if (engagement) {
-      text = `Your request to ${engagement.ca_name} is waiting for an answer.`;
-    }
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>With a CA</CardTitle>
-          <CardDescription>
-            {text}{" "}
-            <Link to="/business/engagements" className="text-primary hover:underline">
-              See my engagements
-            </Link>
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
+  if (!engagement && item.status !== "with_ca") {
+    return <ChoosePath page={page} onUpdated={onUpdated} />;
   }
-  return <ChoosePath page={page} onUpdated={onUpdated} />;
+  let text = "A CA is working on this filing. They will mark it as filed.";
+  if (engagement && engagement.status === "active") {
+    text = `${engagement.ca_name} is working on this filing. They will mark it as filed.`;
+  } else if (engagement) {
+    text = `Your request to ${engagement.ca_name} is waiting for an answer.`;
+  }
+  return (
+    <Section
+      title="With a CA"
+      description={
+        <>
+          {text}{" "}
+          <Link to="/business/engagements" className="text-primary hover:underline">
+            See my engagements
+          </Link>
+        </>
+      }
+    />
+  );
 }
 
 function ChoosePath({ page, onUpdated }) {
   const item = page.filing;
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  async function choose(path) {
-    setError(null);
-    setBusy(true);
-    try {
-      onUpdated(await chooseFilingPath(item.id, path));
-    } catch (failure) {
-      setError(errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const { busy, error, run } = useAction();
   // The marketplace can pre-select the matching service; ITR has several, so no filter.
   const findCaLink =
-    item.form_code === "itr"
-      ? "/business/marketplace"
-      : `/business/marketplace?service=${item.form_code}`;
+    item.form_code === "itr" ? "/business/marketplace" : `/business/marketplace?service=${item.form_code}`;
+
+  function pathButton(path, text) {
+    const chosen = item.filing_path === path;
+    return (
+      <Button
+        variant={chosen ? "default" : "outline"}
+        aria-pressed={chosen}
+        disabled={busy}
+        onClick={() => run(async () => onUpdated(await chooseFilingPath(item.id, path)))}
+      >
+        {text}
+      </Button>
+    );
+  }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>How will you file it?</CardTitle>
-        <CardDescription>
-          File it yourself on the government portal, or let a CA do it for you.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {OPEN_FOR_BUSINESS.includes(item.status) && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={item.filing_path === "self" ? "default" : "outline"}
-              aria-pressed={item.filing_path === "self"}
-              disabled={busy}
-              onClick={() => choose("self")}
-            >
-              I'll file it myself
-            </Button>
-            <Button
-              variant={item.filing_path === "ca" ? "default" : "outline"}
-              aria-pressed={item.filing_path === "ca"}
-              disabled={busy}
-              onClick={() => choose("ca")}
-            >
-              Get a CA
-            </Button>
-          </div>
-        )}
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        {item.filing_path === "ca" && (
-          <p className="text-sm">
-            <Link to={findCaLink} className="text-primary hover:underline">
-              Find a CA for this filing →
-            </Link>
-          </p>
-        )}
-        {item.filing_path === "self" && <MarkFiledForm page={page} onUpdated={onUpdated} />}
-      </CardContent>
-    </Card>
+    <Section
+      title="How will you file it?"
+      description="File it yourself on the government portal, or let a CA do it for you."
+      contentClassName="space-y-4"
+    >
+      {OPEN_FOR_BUSINESS.includes(item.status) && (
+        <div className="flex flex-wrap gap-2">
+          {pathButton("self", "I'll file it myself")}
+          {pathButton("ca", "Get a CA")}
+        </div>
+      )}
+      <ErrorText>{error}</ErrorText>
+      {item.filing_path === "ca" && (
+        <p className="text-sm">
+          <Link to={findCaLink} className="text-primary hover:underline">
+            Find a CA for this filing →
+          </Link>
+        </p>
+      )}
+      {item.filing_path === "self" && <MarkFiledForm page={page} onUpdated={onUpdated} />}
+    </Section>
   );
 }
 
 function MarkFiledForm({ page, onUpdated }) {
   const [arn, setArn] = useState("");
   const [file, setFile] = useState(null);
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, run } = useAction();
 
-  async function onSubmit(event) {
+  function onSubmit(event) {
     event.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      onUpdated(await markFiled(page.filing.id, arn.trim(), file));
-    } catch (failure) {
-      setError(errorMessage(failure));
-      setBusy(false);
-    }
+    run(async () => onUpdated(await markFiled(page.filing.id, arn.trim(), file)));
   }
 
   return (
@@ -311,10 +268,7 @@ function MarkFiledForm({ page, onUpdated }) {
         value={arn}
         onChange={(event) => setArn(event.target.value)}
       />
-      <div className="space-y-2">
-        <Label htmlFor="acknowledgement_file">
-          Acknowledgement file (optional: PDF, JPG or PNG)
-        </Label>
+      <Field id="acknowledgement_file" label="Acknowledgement file (optional: PDF, JPG or PNG)">
         <input
           id="acknowledgement_file"
           type="file"
@@ -322,12 +276,8 @@ function MarkFiledForm({ page, onUpdated }) {
           className="block text-sm"
           onChange={(event) => setFile(event.target.files[0] || null)}
         />
-      </div>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      </Field>
+      <ErrorText>{error}</ErrorText>
       <Button type="submit" disabled={busy}>
         {busy ? "Saving..." : "Mark as filed"}
       </Button>
@@ -362,57 +312,45 @@ function Verification({ verification }) {
 
 function Filed({ page, onUpdated }) {
   const item = page.filing;
-  const [error, setError] = useState(null);
-  const file = useAcknowledgementFile(item.id, page.acknowledgement !== null);
-  // A local link to the downloaded file; freed again when the page closes.
-  const url = useMemo(() => (file.data ? URL.createObjectURL(file.data) : null), [file.data]);
-  useEffect(() => () => url && URL.revokeObjectURL(url), [url]);
-
-  async function undo() {
-    setError(null);
-    try {
-      onUpdated(await unmarkFiled(item.id));
-    } catch (failure) {
-      setError(errorMessage(failure));
-    }
-  }
+  const acknowledgement = page.acknowledgement;
+  const { error, run } = useAction();
+  const file = useAcknowledgementFile(item.id, acknowledgement !== null);
+  const url = useObjectUrl(file.data);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{item.status === "filed_verified" ? "Filed and verified" : "Filed"}</CardTitle>
-        <CardDescription>
+    <Section
+      title={item.status === "filed_verified" ? "Filed and verified" : "Filed"}
+      description={
+        <>
           {item.filed_at ? `Marked as filed on ${formatDateTime(item.filed_at)}.` : "Filed."}
           {item.acknowledgement_no && ` Acknowledgement number: ${item.acknowledgement_no}.`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {page.acknowledgement === null ? (
-          <p className="text-muted-foreground">No acknowledgement file was uploaded.</p>
-        ) : url ? (
-          <a href={url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-            Open the acknowledgement ({page.acknowledgement.filename})
-          </a>
-        ) : (
-          <p className="text-muted-foreground">Loading the acknowledgement...</p>
-        )}
-        {page.acknowledgement !== null && (
-          <Verification verification={page.acknowledgement.verification} />
-        )}
-        {["filed", "filed_verified"].includes(item.status) && item.filing_path === "self" && (
-          <div>
-            <Button variant="outline" size="sm" onClick={undo}>
-              Undo: not filed yet
-            </Button>
-          </div>
-        )}
-        {error && (
-          <p role="alert" className="text-destructive">
-            {error}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+        </>
+      }
+      contentClassName="space-y-3 text-sm"
+    >
+      {acknowledgement === null ? (
+        <p className="text-muted-foreground">No acknowledgement file was uploaded.</p>
+      ) : url ? (
+        <a href={url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+          Open the acknowledgement ({acknowledgement.filename})
+        </a>
+      ) : (
+        <p className="text-muted-foreground">Loading the acknowledgement...</p>
+      )}
+      {acknowledgement !== null && <Verification verification={acknowledgement.verification} />}
+      {item.filing_path === "self" && (
+        <div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => run(async () => onUpdated(await unmarkFiled(item.id)))}
+          >
+            Undo: not filed yet
+          </Button>
+        </div>
+      )}
+      <ErrorText>{error}</ErrorText>
+    </Section>
   );
 }
 
@@ -420,97 +358,74 @@ function Filed({ page, onUpdated }) {
 
 function Checklist({ page, onUpdated }) {
   const item = page.filing;
-  const queryClient = useQueryClient();
-  const [error, setError] = useState(null);
+  const refresh = useRefresh();
   const [busyKey, setBusyKey] = useState(null);
+  const { error, run } = useAction();
   const locked = FILED.includes(item.status);
   const documents = useDocuments({ compliance_item_id: item.id, page_size: 100 });
   const linked = linksByKey(documents.data, item.id);
-
-  async function toggle(entry) {
-    setError(null);
-    setBusyKey(entry.key);
-    try {
-      onUpdated(await tickChecklist(item.id, entry.key, !entry.ticked));
-    } catch (failure) {
-      setError(errorMessage(failure));
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
-  // A file was added or removed: the documents, and maybe a tick and the status, changed.
-  function refresh() {
-    queryClient.invalidateQueries({ queryKey: DOCUMENTS_KEY });
-    queryClient.invalidateQueries({ queryKey: filingKey(item.id) });
-    queryClient.invalidateQueries({ queryKey: FILINGS_KEY });
-    queryClient.invalidateQueries({ queryKey: ["compliance", "dashboard"] });
-  }
-
   const required = page.checklist.filter((entry) => entry.required);
   const requiredTicked = required.filter((entry) => entry.ticked);
 
+  async function toggle(entry) {
+    setBusyKey(entry.key);
+    await run(async () => onUpdated(await tickChecklist(item.id, entry.key, !entry.ticked)));
+    setBusyKey(null);
+  }
+
+  // A file was added or removed: the documents, and maybe a tick and the status, changed.
+  function onChanged() {
+    refresh(DOCUMENTS_KEY, filingKey(item.id), FILINGS_KEY, DASHBOARD_KEY);
+  }
+
+  function documentsOf(key, entryLabel) {
+    return (
+      <EntryDocuments
+        item={item}
+        entryKey={key}
+        entryLabel={entryLabel}
+        links={linked[key] ?? []}
+        locked={locked}
+        onChanged={onChanged}
+      />
+    );
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Documents to have ready</CardTitle>
-        <CardDescription>
-          Tick what you have, or add the file: it is ticked for you, and a CA working on this filing
-          can open it. {requiredTicked.length} of {required.length} required documents ready.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {page.checklist.map((entry) => (
-          <div key={entry.key} className="space-y-1">
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={entry.ticked}
-                disabled={locked || busyKey !== null}
-                onChange={() => toggle(entry)}
-              />
-              <span>
-                {entry.label}
-                {!entry.required && <span className="text-muted-foreground"> (if it applies)</span>}
-                {entry.help && (
-                  <span className="block text-xs text-muted-foreground">{entry.help}</span>
-                )}
-              </span>
-            </label>
-            <EntryDocuments
-              item={item}
-              entryKey={entry.key}
-              entryLabel={entry.label}
-              links={linked[entry.key] ?? []}
-              locked={locked}
-              onChanged={refresh}
+    <Section
+      title="Documents to have ready"
+      description={
+        `Tick what you have, or add the file: it is ticked for you, and a CA working on this ` +
+        `filing can open it. ${requiredTicked.length} of ${required.length} required documents ready.`
+      }
+      contentClassName="space-y-3"
+    >
+      {page.checklist.map((entry) => (
+        <div key={entry.key} className="space-y-1">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={entry.ticked}
+              disabled={locked || busyKey !== null}
+              onChange={() => toggle(entry)}
             />
-          </div>
-        ))}
-        <div className="space-y-1 border-t pt-3">
-          <p className="text-sm font-medium">Other documents for this filing</p>
-          <EntryDocuments
-            item={item}
-            entryKey="general"
-            entryLabel="this filing"
-            links={linked.general ?? []}
-            locked={locked}
-            onChanged={refresh}
-          />
+            <span>
+              {entry.label}
+              {!entry.required && <span className="text-muted-foreground"> (if it applies)</span>}
+              {entry.help && <span className="block text-xs text-muted-foreground">{entry.help}</span>}
+            </span>
+          </label>
+          {documentsOf(entry.key, entry.label)}
         </div>
-        {documents.isError && (
-          <p role="alert" className="text-sm text-destructive">
-            {errorMessage(documents.error)}
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      ))}
+      <div className="space-y-1 border-t pt-3">
+        <p className="text-sm font-medium">Other documents for this filing</p>
+        {documentsOf("general", "this filing")}
+      </div>
+      <ErrorText>{documents.isError && errorMessage(documents.error)}</ErrorText>
+      <ErrorText>{error}</ErrorText>
+    </Section>
   );
 }
 
@@ -530,26 +445,21 @@ function linksByKey(documents, itemId) {
 // The files linked to one checklist entry (or "general"), and "Add a file" for more.
 function EntryDocuments({ item, entryKey, entryLabel, links, locked, onChanged }) {
   const [adding, setAdding] = useState(false);
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, run } = useAction();
 
-  async function run(action) {
-    setError(null);
-    setBusy(true);
-    try {
-      await action();
-    } catch (failure) {
-      setError(errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function remove(link) {
-    run(async () => {
-      await unlinkDocument(link.id);
-      onChanged();
-    });
+  // "Open" or "Remove" next to a file.
+  function linkButton(text, document, action) {
+    return (
+      <Button
+        variant="link"
+        size="sm"
+        disabled={busy}
+        aria-label={text + " " + document.original_filename}
+        onClick={() => run(action)}
+      >
+        {text}
+      </Button>
+    );
   }
 
   return (
@@ -557,26 +467,12 @@ function EntryDocuments({ item, entryKey, entryLabel, links, locked, onChanged }
       {links.map(({ link, document }) => (
         <div key={link.id} className="flex flex-wrap items-center gap-x-2">
           <span className="break-all">{document.original_filename}</span>
-          <Button
-            variant="link"
-            size="sm"
-            disabled={busy}
-            aria-label={"Open " + document.original_filename}
-            onClick={() => run(() => downloadDocument(document))}
-          >
-            Open
-          </Button>
-          {!locked && (
-            <Button
-              variant="link"
-              size="sm"
-              disabled={busy}
-              aria-label={"Remove " + document.original_filename}
-              onClick={() => remove(link)}
-            >
-              Remove
-            </Button>
-          )}
+          {linkButton("Open", document, () => downloadDocument(document))}
+          {!locked &&
+            linkButton("Remove", document, async () => {
+              await unlinkDocument(link.id);
+              onChanged();
+            })}
         </div>
       ))}
       {!locked && !adding && (
@@ -601,106 +497,75 @@ function EntryDocuments({ item, entryKey, entryLabel, links, locked, onChanged }
           onCancel={() => setAdding(false)}
         />
       )}
-      {error && (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
-      )}
+      <ErrorText>{error}</ErrorText>
     </div>
+  );
+}
+
+/** A <select> of the business's vault files (all, or all but `except`). */
+function VaultSelect({ id, except = [], withType }) {
+  const vault = useDocuments({ page_size: 100 });
+  const choices = (vault.data?.items ?? []).filter((document) => !except.includes(document.id));
+  return (
+    <Select id={id} name="document_id" defaultValue="">
+      <option value="">{vault.isPending ? "Loading..." : "Choose a file"}</option>
+      {choices.map((document) => (
+        <option key={document.id} value={document.id}>
+          {document.original_filename}
+          {withType && ` (${label(DOCUMENT_TYPE_LABELS, document.doc_type)})`}
+        </option>
+      ))}
+    </Select>
   );
 }
 
 // Upload a new file for the entry, or link one that is already in the vault.
 function AddDocument({ item, entryKey, links, onAdded, onCancel }) {
-  const vault = useDocuments({ page_size: 100 });
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const alreadyLinked = new Set(links.map(({ document }) => document.id));
-  const choices = (vault.data?.items ?? []).filter((document) => !alreadyLinked.has(document.id));
+  const { busy, error, setError, run } = useAction();
 
-  async function run(action) {
-    setError(null);
-    setBusy(true);
-    try {
-      await action();
-      onAdded();
-    } catch (failure) {
-      setError(errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
+  async function add(action) {
+    if (await run(action)) onAdded();
   }
 
   function onUpload(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const file = event.currentTarget.elements.file.files[0];
-    if (!file) {
-      setError("Choose a file to upload.");
-      return;
-    }
-    run(() =>
-      uploadDocument(file, {
-        doc_type: form.get("doc_type"),
-        compliance_item_id: item.id,
-        checklist_key: entryKey,
-      }),
-    );
+    if (!file) return setError("Choose a file to upload.");
+    const fields = { doc_type: form.get("doc_type"), compliance_item_id: item.id, checklist_key: entryKey };
+    add(() => uploadDocument(file, fields));
   }
 
   function onLink(event) {
     event.preventDefault();
     const documentId = new FormData(event.currentTarget).get("document_id");
-    if (!documentId) {
-      setError("Choose a file from your vault.");
-      return;
-    }
-    run(() => linkDocument(documentId, item.id, entryKey));
+    if (!documentId) return setError("Choose a file from your vault.");
+    add(() => linkDocument(documentId, item.id, entryKey));
   }
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
       <form className="flex flex-wrap items-end gap-2" onSubmit={onUpload}>
-        <div className="space-y-1">
-          <Label htmlFor={"file-" + entryKey}>Upload a new file</Label>
-          <Input id={"file-" + entryKey} name="file" type="file" accept=".pdf,.jpg,.jpeg,.png" />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={"type-" + entryKey}>Type</Label>
-          <select
-            id={"type-" + entryKey}
-            name="doc_type"
-            defaultValue="other"
-            className={SELECT_CLASS}
-          >
-            {UPLOAD_TYPES.map((code) => (
-              <option key={code} value={code}>
-                {DOCUMENT_TYPE_LABELS[code]}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Field id={"file-" + entryKey} label="Upload a new file" className="space-y-1">
+          <Input id={"file-" + entryKey} name="file" type="file" accept={FILE_TYPES} />
+        </Field>
+        <Field id={"type-" + entryKey} label="Type" className="space-y-1">
+          <Select id={"type-" + entryKey} name="doc_type" defaultValue="other">
+            <Options labels={DOCUMENT_TYPE_LABELS} codes={UPLOAD_TYPES} />
+          </Select>
+        </Field>
         <Button type="submit" size="sm" disabled={busy}>
           Upload
         </Button>
       </form>
       <form className="flex flex-wrap items-end gap-2" onSubmit={onLink}>
-        <div className="space-y-1">
-          <Label htmlFor={"existing-" + entryKey}>Or link one from your vault</Label>
-          <select
+        <Field id={"existing-" + entryKey} label="Or link one from your vault" className="space-y-1">
+          <VaultSelect
             id={"existing-" + entryKey}
-            name="document_id"
-            defaultValue=""
-            className={SELECT_CLASS}
-          >
-            <option value="">{vault.isPending ? "Loading..." : "Choose a file"}</option>
-            {choices.map((document) => (
-              <option key={document.id} value={document.id}>
-                {document.original_filename} ({label(DOCUMENT_TYPE_LABELS, document.doc_type)})
-              </option>
-            ))}
-          </select>
-        </div>
+            except={links.map(({ document }) => document.id)}
+            withType
+          />
+        </Field>
         <Button type="submit" size="sm" disabled={busy}>
           Link
         </Button>
@@ -708,11 +573,7 @@ function AddDocument({ item, entryKey, links, onAdded, onCancel }) {
           Cancel
         </Button>
       </form>
-      {error && (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
-      )}
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }
@@ -731,24 +592,23 @@ function PeerInsights({ item }) {
     const type = label(ENTITY_TYPE_LABELS, data.entity_type).toLowerCase();
     who = `${data.business_count} ${tier} businesses like yours (${type}) that filed ${form}`;
   }
-
+  if (data.scope === "none") {
+    return (
+      <Section
+        title="How similar businesses file it"
+        description={`Not enough businesses have filed ${form} here yet to compare (at least ${data.min_businesses} are needed).`}
+      />
+    );
+  }
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>How similar businesses file it</CardTitle>
-        <CardDescription>
-          {data.scope === "none"
-            ? `Not enough businesses have filed ${form} here yet to compare (at least ${data.min_businesses} are needed).`
-            : `Among ${who}:`}
-        </CardDescription>
-      </CardHeader>
-      {data.scope !== "none" && (
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
-          <PeerPath title="Filed it themselves" figures={data.self} />
-          <PeerPath title="Filed it through a CA" figures={data.ca} />
-        </CardContent>
-      )}
-    </Card>
+    <Section
+      title="How similar businesses file it"
+      description={`Among ${who}:`}
+      contentClassName="grid gap-3 text-sm sm:grid-cols-2"
+    >
+      <PeerPath title="Filed it themselves" figures={data.self} />
+      <PeerPath title="Filed it through a CA" figures={data.ca} />
+    </Section>
   );
 }
 
@@ -757,11 +617,7 @@ function PeerPath({ title, figures }) {
     <div className="rounded-lg border p-3">
       <p className="text-muted-foreground">{title}</p>
       <p className="text-2xl font-semibold tabular-nums">{figures.share_pct ?? 0}%</p>
-      <p>
-        {figures.on_time_pct === null
-          ? "No filings yet"
-          : `${figures.on_time_pct}% of them on time`}
-      </p>
+      <p>{figures.on_time_pct === null ? "No filings yet" : `${figures.on_time_pct}% of them on time`}</p>
     </div>
   );
 }
@@ -771,66 +627,46 @@ function PeerPath({ title, figures }) {
 function CaRequests({ page }) {
   const item = page.filing;
   const requests = useMyDocumentRequests(item.id);
-  const queryClient = useQueryClient();
+  const refresh = useRefresh();
   if (!requests.isSuccess || requests.data.length === 0) return null;
 
   const labels = { general: "A document" };
   for (const entry of page.checklist) labels[entry.key] = entry.label;
 
-  // The request was answered: the file, the ticks and the to-dos changed.
-  function refresh() {
-    queryClient.invalidateQueries({ queryKey: CA_WORKSPACE_KEY });
-    queryClient.invalidateQueries({ queryKey: DOCUMENTS_KEY });
-    queryClient.invalidateQueries({ queryKey: filingKey(item.id) });
-    queryClient.invalidateQueries({ queryKey: FILINGS_KEY });
-  }
-
   return (
-    <Card className="ring-amber-300">
-      <CardHeader>
-        <CardTitle>Your CA asked for documents</CardTitle>
-        <CardDescription>Send each file here; your CA is told when it arrives.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        {requests.data.map((request) => (
-          <AnswerRequest
-            key={request.id}
-            request={request}
-            what={label(labels, request.checklist_key)}
-            onAnswered={refresh}
-          />
-        ))}
-      </CardContent>
-    </Card>
+    <Section
+      title="Your CA asked for documents"
+      description="Send each file here; your CA is told when it arrives."
+      className="ring-amber-300"
+      contentClassName="space-y-4 text-sm"
+    >
+      {requests.data.map((request) => (
+        <AnswerRequest
+          key={request.id}
+          request={request}
+          what={label(labels, request.checklist_key)}
+          // The file, the ticks and the to-dos changed.
+          onAnswered={() => refresh(CA_WORKSPACE_KEY, DOCUMENTS_KEY, filingKey(item.id), FILINGS_KEY)}
+        />
+      ))}
+    </Section>
   );
 }
 
 // Answer one request with a new file (uploaded to the vault first) or a vault file.
 function AnswerRequest({ request, what, onAnswered }) {
-  const vault = useDocuments({ page_size: 100 });
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAction();
 
   async function onSubmit(event) {
     event.preventDefault();
-    const formElement = event.currentTarget;
-    const file = formElement.elements.file.files[0];
-    const documentId = new FormData(formElement).get("document_id");
-    if (!file && !documentId) {
-      setError("Choose a file to upload, or one from your vault.");
-      return;
-    }
-    setError(null);
-    setBusy(true);
-    try {
+    const file = event.currentTarget.elements.file.files[0];
+    const documentId = new FormData(event.currentTarget).get("document_id");
+    if (!file && !documentId) return setError("Choose a file to upload, or one from your vault.");
+    const sent = await run(async () => {
       const chosen = file ? (await uploadDocument(file, { doc_type: "other" })).id : documentId;
       await fulfilDocumentRequest(request.id, chosen);
-      onAnswered();
-    } catch (failure) {
-      setError(errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
+    });
+    if (sent) onAnswered();
   }
 
   return (
@@ -839,40 +675,17 @@ function AnswerRequest({ request, what, onAnswered }) {
         <span className="font-medium">{what}</span> · {request.ca_name}: “{request.message}”
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <Label htmlFor={"answer-file-" + request.id}>Upload a file</Label>
-          <Input
-            id={"answer-file-" + request.id}
-            name="file"
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={"answer-vault-" + request.id}>or choose from your vault</Label>
-          <select
-            id={"answer-vault-" + request.id}
-            name="document_id"
-            defaultValue=""
-            className={SELECT_CLASS}
-          >
-            <option value="">{vault.isPending ? "Loading..." : "Choose a file"}</option>
-            {(vault.data?.items ?? []).map((document) => (
-              <option key={document.id} value={document.id}>
-                {document.original_filename}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Field id={"answer-file-" + request.id} label="Upload a file" className="space-y-1">
+          <Input id={"answer-file-" + request.id} name="file" type="file" accept={FILE_TYPES} />
+        </Field>
+        <Field id={"answer-vault-" + request.id} label="or choose from your vault" className="space-y-1">
+          <VaultSelect id={"answer-vault-" + request.id} />
+        </Field>
         <Button type="submit" size="sm" disabled={busy}>
           Send to my CA
         </Button>
       </div>
-      {error && (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
-      )}
+      <ErrorText>{error}</ErrorText>
     </form>
   );
 }
@@ -899,9 +712,7 @@ function Guide({ page }) {
               onClick={() => setTab(key)}
               className={
                 "rounded-full border px-3 py-1 text-sm " +
-                (tab === key
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "hover:bg-muted")
+                (tab === key ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")
               }
             >
               {title}
