@@ -8,6 +8,7 @@ Needs no database. Run in the backend container:
 """
 
 import csv
+import shutil
 import sys
 from datetime import date
 from pathlib import Path
@@ -56,7 +57,7 @@ def _correct(found, expected: str) -> bool:
 
 
 def main() -> None:
-    if not ocr.ocr_available():
+    if shutil.which("tesseract") is None:
         sys.exit("Tesseract is not installed: rebuild the backend image (docker compose build backend).")
 
     labels = {}
