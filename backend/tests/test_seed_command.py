@@ -1,42 +1,12 @@
-"""`flask seed` inserts the demo users, CA profiles, catalog and prices, once, without errors."""
+"""`flask seed` fills the rule tables, and backend/demo_data.sql loads on top of them."""
 
-import pytest
 from sqlalchemy import func, select
 
-from app.models import (
-    SERVICE_SPECIALIZATIONS,
-    CaProfile,
-    CaService,
-    CatalogService,
-    CaVerificationStatus,
-    User,
-    UserRole,
-)
-from app.seed import SAMPLE_CAS, SAMPLE_PRICES, SERVICE_CATALOG
-from app.utils import verify_password
+from app.models import Business, CatalogService, Engagement, User
+from app.seed import SERVICE_CATALOG
+from app.utils import REPO_ROOT, verify_password
 
-DEMO_ENV = {
-    "DEMO_BUSINESS_EMAIL": " Business@Demo.local ",
-    "DEMO_BUSINESS_PASSWORD": "business-pass",
-    "DEMO_CA_EMAIL": "ca@demo.local",
-    "DEMO_CA_PASSWORD": "ca-pass",
-    "DEMO_ADMIN_EMAIL": "admin@demo.local",
-    "DEMO_ADMIN_PASSWORD": "admin-pass",
-}
-
-
-@pytest.fixture()
-def demo_env(monkeypatch):
-    for name, value in DEMO_ENV.items():
-        monkeypatch.setenv(name, value)
-
-
-SAMPLE_EMAILS = {email for email, _, _ in SAMPLE_CAS}
-
-
-def demo_users(database):
-    """Seeded users except the sample CAs."""
-    return [u for u in database.session.scalars(select(User)) if u.email not in SAMPLE_EMAILS]
+DEMO_SQL = REPO_ROOT / "backend" / "demo_data.sql"
 
 
 def run_seed(app):
@@ -45,34 +15,32 @@ def run_seed(app):
     return result
 
 
-def test_seed_command_lists_what_it_seeded(app, database, demo_env):
+def load_demo_sql(database):
+    """Run the demo SQL file like psql would (it has its own BEGIN and COMMIT)."""
+    connection = database.engine.raw_connection()
+    try:
+        connection.cursor().execute(DEMO_SQL.read_text())
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def count(database, model):
+    return database.session.scalar(select(func.count(model.id)))
+
+
+def test_seed_command_lists_what_it_seeded(app, database):
     result = run_seed(app)
 
-    assert (
-        "Seeded: demo users, CA profiles, service catalog, CA prices, "
-        "rule thresholds, obligation templates" in result.output
-    )
+    assert "Seeded: service catalog, rule thresholds, obligation templates" in result.output
 
 
-def test_seed_creates_one_hashed_demo_user_per_role(app, database, demo_env):
-    run_seed(app)
-
-    users = {u.role: u for u in demo_users(database)}
-    assert set(users) == set(UserRole)
-    business = users[UserRole.BUSINESS]
-    assert business.email == "business@demo.local"  # stored normalized
-    assert business.password_hash != "business-pass"
-    assert verify_password(business.password_hash, "business-pass")
-    assert all(user.email_verified_at is not None for user in users.values())  # can log in
-
-
-def test_seed_is_idempotent(app, database, demo_env):
+def test_seed_is_idempotent_and_adds_no_users(app, database):
     run_seed(app)
     run_seed(app)
 
-    assert database.session.scalar(select(func.count(User.id))) == 3 + len(SAMPLE_CAS)
-    assert database.session.scalar(select(func.count(CaProfile.id))) == 1 + len(SAMPLE_CAS)
-    assert database.session.scalar(select(func.count(CatalogService.id))) == len(SERVICE_CATALOG)
+    assert count(database, User) == 0  # the demo accounts come from demo_data.sql
+    assert count(database, CatalogService) == len(SERVICE_CATALOG)
     # Each filing service knows its form (a request uses it to find the CA's price).
     gstr_3b = database.session.scalar(
         select(CatalogService).where(CatalogService.code == "gstr_3b")
@@ -82,49 +50,19 @@ def test_seed_is_idempotent(app, database, demo_env):
     )
     assert gstr_3b.form_code == "gstr_3b"
     assert tax_audit.form_code is None
-    price_count = sum(len(prices) for prices in SAMPLE_PRICES.values())
-    assert database.session.scalar(select(func.count(CaService.id))) == price_count
 
 
-def test_seed_gives_the_demo_ca_and_sample_cas_verified_profiles(app, database, demo_env):
+def test_the_demo_sql_loads_and_can_run_again(app, database, make_user):
     run_seed(app)
+    teammate = make_user(email="teammate@example.com")
 
-    profiles = database.session.scalars(select(CaProfile)).all()
-    emails = {profile.user.email for profile in profiles}
-    assert emails == {"ca@demo.local"} | SAMPLE_EMAILS
-    assert {p.verification_status for p in profiles} == {CaVerificationStatus.VERIFIED}
+    load_demo_sql(database)
+    load_demo_sql(database)  # it removes the old demo data first
 
-
-def test_seed_skips_roles_without_demo_variables(app, database, demo_env, monkeypatch):
-    monkeypatch.delenv("DEMO_CA_PASSWORD")
-
-    run_seed(app)
-
-    roles = {user.role for user in demo_users(database)}
-    assert roles == {UserRole.BUSINESS, UserRole.ADMIN}
-
-
-def test_sample_cas_specialize_in_every_service_they_price(app, database, demo_env):
-    run_seed(app)
-
-    for email, prices in SAMPLE_PRICES.items():
-        profile = database.session.scalar(
-            select(CaProfile).join(CaProfile.user).where(User.email == email)
-        )
-        for code in prices:
-            assert SERVICE_SPECIALIZATIONS[code] in profile.specializations, (email, code)
-
-
-def test_seed_adds_new_specializations_to_existing_sample_profiles(app, database, demo_env):
-    run_seed(app)
-    profile = database.session.scalar(
-        select(CaProfile).join(CaProfile.user).where(User.email == "sample-ca-2@demo.local")
-    )
-    profile.specializations = ["gstr_1"]  # as seeded by an older version
-    database.session.commit()
-
-    run_seed(app)
-
-    database.session.refresh(profile)
-    assert profile.specializations[0] == "gstr_1"
-    assert "itr" in profile.specializations
+    database.session.expire_all()
+    assert count(database, User) == 22  # 21 demo accounts + the teammate, kept
+    assert count(database, Business) == 14
+    assert count(database, Engagement) == 16
+    owner = database.session.scalar(select(User).where(User.email == "business@demo.local"))
+    assert verify_password(owner.password_hash, "DemoBusiness#2026")
+    assert database.session.get(User, teammate.id) is not None

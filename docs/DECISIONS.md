@@ -4,6 +4,26 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-08: Demo data is SQL in the shared Neon database, not seed code
+
+**What**
+- The demo accounts, sample CAs and their prices, and the 14 demo businesses are data in
+  `backend/demo_data.sql`, not Python: `app/demo_seed.py`, `flask seed-demo` and the demo parts of
+  `app/seed.py` (`DEMO_*` variables, `SAMPLE_CAS`, `SAMPLE_PRICES`) are gone. `flask seed` now fills only the
+  service catalog, the rule tables, the NIC codes and the news sources.
+- The file can run again: it deletes the rows of `@demo.local` accounts first. It updates demo users and CA
+  profiles in place, matched by email, so other rows that point at them keep working. Rows that point at the
+  rule tables look them up by code, so the file works on any database.
+- Neon was upgraded to this project's migrations (AI assistant, pro-bono and quote tables and columns dropped),
+  reseeded, and given this demo data on 2026-10-08. A full backup taken first is kept outside the repo
+  (`neon_backup_2026-10-08.dump`). The one engagement between a demo business and a teammate's CA was replaced
+  with the demo data.
+- `flask reset-db` refuses a Neon `DATABASE_URL`.
+
+**Why:** fewer lines of code; the team shares one database that already holds the demo data. Trade-off: the
+demo deadlines are fixed dates from 8 Oct 2026, so over the weeks more demo filings become overdue.
+
+
 ## 2026-10-08: A simpler vault, purple OCR fields, emails that say who wrote to whom
 
 **What**

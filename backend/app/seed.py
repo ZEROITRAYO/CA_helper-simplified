@@ -1,32 +1,18 @@
-"""Development seed data and the `flask seed` command.
+"""The rule tables and the `flask seed` command.
 
-Demo users, one per role, come from DEMO_* variables in .env:
+The demo accounts and businesses are not made here: they are data in backend/demo_data.sql
+(see the README). This file seeds the service catalog; the legal rule thresholds, the
+obligation templates and the penalty rules of the 7 forms, each with its official source
+(values not confirmed yet are marked TODO_VERIFY, see docs/TODO_VERIFY.md); the official NIC
+activity codes from content/reference/nic_2008.csv; and the regulatory monitor's news sources.
 
-    DEMO_BUSINESS_EMAIL / DEMO_BUSINESS_PASSWORD
-    DEMO_CA_EMAIL       / DEMO_CA_PASSWORD
-    DEMO_ADMIN_EMAIL    / DEMO_ADMIN_PASSWORD
-
-A role whose variables are empty is skipped with a warning. The demo CA gets a
-verified practice profile, and four sample CAs (sample-ca-N@demo.local, random
-passwords nobody knows, so they cannot log in) fill the marketplace list. The
-service catalog is seeded here too (an admin editor comes later), and the four
-sample CAs get prices, so Find a CA shows fees. The legal rule
-thresholds, the obligation templates and the penalty rules of the 7 forms are seeded too,
-each with its official source; the values not confirmed yet are marked TODO_VERIFY
-(docs/TODO_VERIFY.md). These three seeds also update rows seeded earlier, so a corrected
-value reaches every database on the next `flask seed`.
-The official NIC activity codes are loaded from content/reference/nic_2008.csv, and the
-regulatory monitor's news sources are added.
-
-Every seed function
-must be safe to re-run (it skips or updates rows that already exist) and must not commit:
+Every seed function must be safe to re-run (it adds missing rows and updates the rest, so a
+corrected value reaches every database on the next `flask seed`) and must not commit:
 run_all_seeds() commits once at the end. Add a new table's seed function to SEEDS.
 """
 
 import csv
 import logging
-import os
-import secrets
 from datetime import date
 from decimal import Decimal
 
@@ -35,12 +21,8 @@ from flask_migrate import upgrade
 from sqlalchemy import select, text
 
 from app import onboarding
-from app.auth import normalize_email
 from app.models import (
-    CaProfile,
-    CaService,
     CatalogService,
-    CaVerificationStatus,
     db,
     FormCode,
     Frequency,
@@ -51,164 +33,11 @@ from app.models import (
     PenaltyRule,
     RuleThreshold,
     ServiceUnit,
-    User,
-    UserRole,
-    utcnow,
 )
-from app.utils import hash_password, REPO_ROOT
+from app.utils import REPO_ROOT
 
 log = logging.getLogger(__name__)
 
-DEMO_NAMES = {
-    UserRole.BUSINESS: "Demo Business Owner",
-    UserRole.CA: "Demo CA",
-    UserRole.ADMIN: "Demo Admin",
-}
-
-
-def seed_demo_users():
-    for role, full_name in DEMO_NAMES.items():
-        prefix = f"DEMO_{role.value.upper()}"
-        email = normalize_email(os.getenv(f"{prefix}_EMAIL", ""))
-        password = os.getenv(f"{prefix}_PASSWORD", "")
-        if not email or not password:
-            log.warning("Skipping demo %s user: set %s_EMAIL and %s_PASSWORD", role, prefix, prefix)
-            continue
-        if db.session.scalar(select(User.id).where(User.email == email)):
-            continue
-        db.session.add(
-            User(
-                email=email,
-                password_hash=hash_password(password),
-                full_name=full_name,
-                role=role,
-                email_verified_at=utcnow(),  # demo users can log in without a code
-            )
-        )
-
-
-# Made-up practices for development. The membership numbers are fictional.
-DEMO_CA_PROFILE = {
-    "membership_no": "900000",
-    "cop_number": "COP-900000",
-    "city": "Mumbai",
-    "languages": ["english", "hindi", "marathi"],
-    "specializations": ["itr", "gstr_1", "gstr_3b", "tax_audit"],
-    "capacity": 25,
-    "years_experience": 8,
-    "about": "Demo practice for small traders and freelancers in Mumbai.",
-}
-
-# (email, full name, profile fields)
-SAMPLE_CAS = [
-    (
-        "sample-ca-1@demo.local",
-        "Priya Iyer",
-        {
-            "membership_no": "900001",
-            "cop_number": "COP-900001",
-            "city": "Chennai",
-            "languages": ["english", "tamil"],
-            "specializations": ["itr", "tds_24q", "tds_26q", "income_tax_notices"],
-            "capacity": 30,
-            "years_experience": 12,
-            "about": "Income tax and TDS for salaried professionals and small employers.",
-        },
-    ),
-    (
-        "sample-ca-2@demo.local",
-        "Rahul Mehta",
-        {
-            "membership_no": "900002",
-            "cop_number": "COP-900002",
-            "city": "Ahmedabad",
-            "languages": ["english", "hindi", "gujarati"],
-            "specializations": ["gstr_1", "gstr_3b", "cmp_08", "gstr_4", "gst_registration", "itr"],
-            "capacity": 40,
-            "years_experience": 6,
-            "about": "GST for traders: registration, monthly and composition returns.",
-        },
-    ),
-    (
-        "sample-ca-3@demo.local",
-        "Ananya Sen",
-        {
-            "membership_no": "900003",
-            "cop_number": "COP-900003",
-            "city": "Kolkata",
-            "languages": ["english", "bengali", "hindi"],
-            "specializations": [
-                "itr",
-                "accounting_bookkeeping",
-                "startup_msme_advisory",
-                "gstr_3b",
-            ],
-            "capacity": 15,
-            "years_experience": 3,
-            "about": "Bookkeeping and ITR for first-time founders and gig workers.",
-        },
-    ),
-    (
-        "sample-ca-4@demo.local",
-        "Vikram Rao",
-        {
-            "membership_no": "900004",
-            "cop_number": "COP-900004",
-            "city": "Bengaluru",
-            "languages": ["english", "kannada", "telugu"],
-            "specializations": ["company_llp_compliance", "tax_audit", "itr", "tds_26q", "gstr_3b"],
-            "capacity": 20,
-            "years_experience": 15,
-            "about": "Audits and compliance for LLPs and private limited companies.",
-        },
-    ),
-]
-
-
-def _add_verified_profile(user_id, fields):
-    """Add a verified CA profile unless the user already has one."""
-    if db.session.scalar(select(CaProfile.id).where(CaProfile.user_id == user_id)):
-        return
-    db.session.add(
-        CaProfile(user_id=user_id, verification_status=CaVerificationStatus.VERIFIED, **fields)
-    )
-
-
-def _add_missing_specializations(user_id, specializations):
-    """Give an existing sample profile the specializations SAMPLE_CAS lists."""
-    profile = db.session.scalar(select(CaProfile).where(CaProfile.user_id == user_id))
-    missing = []
-    for code in specializations:
-        if code not in profile.specializations:
-            missing.append(code)
-    if missing:
-        profile.specializations = profile.specializations + missing
-
-
-def seed_ca_profiles():
-    demo_email = normalize_email(os.getenv("DEMO_CA_EMAIL", ""))
-    demo_ca_id = db.session.scalar(select(User.id).where(User.email == demo_email))
-    if demo_email and demo_ca_id:
-        _add_verified_profile(demo_ca_id, DEMO_CA_PROFILE)
-
-    for email, full_name, fields in SAMPLE_CAS:
-        user = db.session.scalar(select(User).where(User.email == email))
-        if user is None:
-            user = User(
-                email=email,
-                password_hash=hash_password(secrets.token_urlsafe(32)),  # nobody knows it
-                full_name=full_name,
-                role=UserRole.CA,
-                email_verified_at=utcnow(),
-            )
-            db.session.add(user)
-            db.session.flush()  # gives user.id
-        _add_verified_profile(user.id, fields)
-        _add_missing_specializations(user.id, fields["specializations"])
-
-
-# The standard services every CA prices against: (code, name, description, unit).
-# Listed in this order.
 SERVICE_CATALOG = [
     (
         "itr_presumptive",
@@ -283,40 +112,6 @@ SERVICE_CATALOG = [
 # Sample prices (rupees) of the sample CAs, by email and service code. Made up for
 # development, so Find a CA shows fees. The demo CA gets no prices:
 # set them yourself on /ca/services.
-SAMPLE_PRICES = {
-    "sample-ca-1@demo.local": {
-        "itr_presumptive": "1200",
-        "itr_business": "2500",
-        "tds_24q": "1500",
-        "tds_26q": "1500",
-        "income_tax_notice": "3000",
-    },
-    "sample-ca-2@demo.local": {
-        "itr_presumptive": "900",
-        "gstr_1": "500",
-        "gstr_3b": "600",
-        "cmp_08": "800",
-        "gstr_4": "2000",
-        "gst_registration": "1500",
-    },
-    "sample-ca-3@demo.local": {
-        "itr_presumptive": "1000",
-        "itr_business": "2000",
-        "gstr_3b": "700",
-        "bookkeeping": "2500",
-    },
-    "sample-ca-4@demo.local": {
-        "itr_business": "4000",
-        "itr_firm_company": "8000",
-        "gstr_3b": "1000",
-        "tax_audit": "30000",
-        "tds_26q": "2000",
-    },
-}
-
-
-# The filing each catalog service is for, so a request can find the CA's price for a
-# filing. Services that are not one filing (GST registration, tax audit, ...) have none.
 SERVICE_FORM_CODES = {
     "itr_presumptive": FormCode.ITR,
     "itr_business": FormCode.ITR,
@@ -342,26 +137,6 @@ def seed_service_catalog():
         # Set every time: databases seeded before this column existed get it too.
         service.form_code = SERVICE_FORM_CODES.get(code)
         sort_order = sort_order + 1
-
-
-def seed_ca_prices():
-    for email, prices in SAMPLE_PRICES.items():
-        profile = db.session.scalar(
-            select(CaProfile).join(CaProfile.user).where(User.email == email)
-        )
-        if profile is None:
-            continue
-        for code, price in prices.items():
-            service = db.session.scalar(select(CatalogService).where(CatalogService.code == code))
-            exists = db.session.scalar(
-                select(CaService.id).where(
-                    CaService.ca_profile_id == profile.id, CaService.service_id == service.id
-                )
-            )
-            if not exists:
-                db.session.add(
-                    CaService(ca_profile_id=profile.id, service_id=service.id, price=Decimal(price))
-                )
 
 
 # --- Legal values (from official sources) ----------------------------------------------
@@ -742,10 +517,7 @@ def seed_filing_dates():
 
 # (name, function) in dependency order: users first, other data may refer to them.
 SEEDS = [
-    ("demo users", seed_demo_users),
-    ("CA profiles", seed_ca_profiles),
     ("service catalog", seed_service_catalog),
-    ("CA prices", seed_ca_prices),
     ("rule thresholds", seed_rule_thresholds),
     ("obligation templates", seed_obligation_templates),
     ("penalty rules", seed_penalty_rules),
@@ -766,21 +538,16 @@ def run_all_seeds():
 def register_commands(app):
     @app.cli.command("seed")
     def seed_command():
-        """Insert development seed data. Safe to re-run."""
+        """Insert or update the rule tables. Safe to re-run."""
         click.echo(f"Seeded: {', '.join(run_all_seeds())}")
-
-    @app.cli.command("seed-demo")
-    def seed_demo_command():
-        """Insert the fictional demo data (app/demo_seed.py) after the normal seed. Runs once."""
-        from app.demo_seed import seed_demo_data  # demo_seed imports this module
-
-        click.echo(f"Seeded: {', '.join(run_all_seeds())}")
-        click.echo(seed_demo_data())
 
     @app.cli.command("reset-db")
     @click.confirmation_option(prompt="Delete every table and all data in DATABASE_URL?")
     def reset_db_command():
         """Drop every table, create them again with the migrations, then run the seed."""
+        # Never on the team's shared database.
+        if "neon.tech" in db.engine.url.render_as_string():
+            raise click.ClickException("reset-db is for a local database only, not Neon.")
         # Dropping the whole schema also removes tables that no longer have a model.
         with db.engine.begin() as conn:
             conn.execute(text("DROP SCHEMA public CASCADE"))

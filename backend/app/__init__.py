@@ -3,12 +3,12 @@
 `create_app()` is used by every entrypoint:
 
 - the dev server:   `python main.py` (the backend service of docker-compose.yml)
-- the `flask` CLI:   `flask --app app db upgrade | seed | seed-demo | reset-db`
+- the `flask` CLI:   `flask --app app db upgrade | seed | reset-db`
 - the worker:        `python worker.py` (the worker service)
 - the tests:         `backend/tests/conftest.py`
 
 Files: models.py (tables), utils.py (shared helpers), ocr.py (reading documents), one
-file per feature (auth.py, compliance.py, ...), seed.py and demo_seed.py.
+file per feature (auth.py, compliance.py, ...) and seed.py.
 """
 
 import logging

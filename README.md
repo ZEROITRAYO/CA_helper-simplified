@@ -25,15 +25,19 @@ Compose plugin (2.17+) on Linux. Nothing else: Python, Node, Postgres and Tesser
 docker compose up
 ```
 
-A new, empty database needs this once, from one person only (the shared Neon database already has it). In a
-second terminal in the same folder, one line: it creates the tables, adds the rules, forms, NIC codes and demo
-users, then the demo data below.
+The shared Neon database is ready: it has the tables, the rules and the demo data. Nothing to run.
+
+A new, empty database (your own) needs this once. In a second terminal in the same folder: the first line creates
+the tables and adds the rules, forms, NIC codes and service catalog; the second adds the demo data.
 
 ```bash
-docker compose exec backend sh -c "flask --app app db upgrade && flask --app app seed && flask --app app seed-demo"
+docker compose exec backend sh -c "flask --app app db upgrade && flask --app app seed"
+docker compose exec -T db psql "<your DATABASE_URL without +psycopg>" < backend/demo_data.sql
 ```
 
-It ends with `Demo data added: 14 businesses`. Run again later, it changes nothing (`Demo data is already there`).
+For the local Docker database the second line is
+`docker compose exec -T db psql -U ca_helper -d ca_helper < backend/demo_data.sql`.
+The demo data's PAN, GSTIN, TAN and phone values only read correctly with the team's `FIELD_ENCRYPTION_KEY`.
 
 Then open:
 
@@ -52,7 +56,7 @@ Other commands:
 | Frontend tests | `docker compose exec frontend npm test` |
 | Production build check | `docker compose exec frontend npm run build` |
 | Read the news sources now | `docker compose exec backend flask --app app regulatory scan` |
-| Empty the database and seed it again | `docker compose exec backend flask --app app reset-db` |
+| Empty a local database and seed it again (refuses Neon) | `docker compose exec backend flask --app app reset-db` |
 | After a change to `requirements.txt` or `package.json` | `docker compose up --build` |
 
 Without `GEMINI_API_KEY` everything still works: the NIC suggestions and the news monitor use
@@ -60,12 +64,11 @@ their keyword fallbacks. The evaluation scripts for the report are in [eval/](ev
 
 ## Demo script
 
-`flask seed-demo` adds fictional demo data once (`backend/app/demo_seed.py`): 14 businesses, their filings for
-this financial year, engagements of the demo CA in every status, documents, document requests, notifications,
-ratings and a CA waiting for verification. Every name, PAN, GSTIN and file is made up. It
-gives `business@demo.local` a business (Asha Traders) only if that account has none yet. To start again from
-scratch: `docker compose exec backend flask --app app reset-db`, then
-`docker compose exec backend flask --app app seed-demo`.
+The demo data is plain SQL in [backend/demo_data.sql](backend/demo_data.sql): the demo accounts, four sample
+CAs with prices, 14 businesses with their filings, engagements of the demo CA in every status, documents,
+document requests, notifications, ratings and a CA waiting for verification. Every name, PAN, GSTIN and file is
+made up. Running the file again replaces the demo data and keeps everyone else's rows. Its deadlines are fixed
+dates from 8 Oct 2026.
 
 Demo logins: `business@demo.local` (`DemoBusiness#2026`; the other demo businesses are `demo-biz-01@demo.local` to
 `demo-biz-13@demo.local` with the same password), `ca@demo.local` (`DemoCA#2026`), `admin@demo.local`
