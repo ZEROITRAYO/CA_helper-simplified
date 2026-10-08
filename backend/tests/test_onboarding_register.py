@@ -50,7 +50,7 @@ def test_register_returns_the_business_and_its_profile(client, owner, auth_heade
     assert body["profile"]["msme_tier"] == "micro"
     assert body["profile"]["gst_scheme"] == "regular_qrmp"
     assert body["profile"]["itr_form"] == "itr_4"
-    assert body["profile"]["explanations"]["gst_scheme"]
+    assert body["profile"]["explanations"]["gst_scheme"] == ""  # GST is not suggested
 
 
 def test_register_creates_the_filings(client, owner, auth_headers, database):

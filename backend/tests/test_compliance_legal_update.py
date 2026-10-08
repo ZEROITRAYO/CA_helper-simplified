@@ -62,7 +62,7 @@ def make_business(database, make_user, entity, turnover=4_500_000, **fields) -> 
         **onboarding_service.compute_profile(business, TODAY),
     )
     database.session.add(profile)
-    compliance_service.create_filings(business.id, profile, TODAY)
+    compliance_service.sync_filings(business.id, profile, TODAY)
     database.session.commit()
     return business
 
@@ -109,7 +109,7 @@ def test_a_tds_filing_page_and_reminder_use_the_new_name(
     assert page["form_name"] == "TDS return, salary (Form 138, earlier 24Q)"
     assert compliance_service.filing_name(q2) == "Form 138 (earlier 24Q) (Q2 2026-27)"
     assert (
-        alerts_service._reminder_title(q2, 7)
+        alerts_service.reminder_title(q2, 7)
         == "Form 138 (earlier 24Q) (Q2 2026-27) is due in 7 days"
     )
 
@@ -162,11 +162,9 @@ def test_resync_moves_the_due_date_back_to_the_rule(database, make_user, legal_r
     itr_of(database, llp).due_date = date(2027, 8, 31)
     database.session.commit()
 
-    counts = onboarding_service.resync_all_filings(TODAY)
+    onboarding_service.resync_all_filings(TODAY)
 
-    assert counts["businesses"] == 1
     assert itr_of(database, llp).due_date == date(2027, 7, 31)
-    assert counts["added"] == counts["removed"] == 0
 
 
 def test_the_seed_lists_the_resync(app, database, legal_rules):

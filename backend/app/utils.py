@@ -1,30 +1,28 @@
-"""Helpers every feature uses: errors, access control, email, passwords, GSTIN
-checks, amounts, the upload checks and the page shapes of list endpoints.
+"""Helpers every feature uses: errors, reading request fields, access control, email,
+passwords, GSTIN checks, amounts and the upload checks.
 """
 
 import json
 import logging
 import smtplib
 import uuid
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from email.message import EmailMessage
 from functools import wraps
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from flask import current_app, request
+from flask import current_app, render_template, request
 from flask_jwt_extended import get_current_user, verify_jwt_in_request
-from jinja2 import Template
 from sqlalchemy import select
 from werkzeug.exceptions import HTTPException
 
 from app.models import Business, db, UserRole
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+log = logging.getLogger(__name__)
 
 
 # --- errors ------------------------------------------------------------------------
@@ -35,28 +33,15 @@ class ApiError(Exception):
 
     def __init__(self, status, code, message, details=None):
         super().__init__(message)
-        self.status = status
-        self.code = code
-        self.message = message
-        self.details = details
+        self.status, self.code, self.message, self.details = status, code, message, details
 
 
 def error_body(code, message, details=None):
     """Build the standard error payload."""
-    error: dict[str, Any] = {"code": code, "message": message}
+    error = {"code": code, "message": message}
     if details:
         error["details"] = details
     return {"error": error}
-
-
-def default_code(status):
-    """Default error code for an HTTP status, e.g. 404 -> "NOT_FOUND"."""
-    if status == 422:
-        return "VALIDATION_ERROR"
-    try:
-        return HTTPStatus(status).name
-    except ValueError:
-        return "ERROR"
 
 
 def register_error_handlers(app):
@@ -71,11 +56,19 @@ def register_error_handlers(app):
     @app.errorhandler(HTTPException)
     def handle_http_error(error):
         status = error.code or 500
-        return error_body(default_code(status), error.description or HTTPStatus(status).phrase), status
+        return error_body(HTTPStatus(status).name, error.description), status
 
+
+# --- reading request fields --------------------------------------------------------
+# Each reader returns the value or raises 422 VALIDATION_ERROR for the first bad field,
+# with details {location: {field: [message]}}.
 
 # The message of a required field that was not sent.
 MISSING = "Missing data for required field."
+
+
+def invalid(field, message, location="json"):
+    return ApiError(422, "VALIDATION_ERROR", message, {location: {field: [message]}})
 
 
 def json_body():
@@ -84,44 +77,92 @@ def json_body():
     return data if isinstance(data, dict) else {}
 
 
-def validation_error(errors, location="json"):
-    """The 422 answer for invalid fields: details {location: {field: [message]}}."""
-    return ApiError(422, "VALIDATION_ERROR", "Some fields are invalid.", {location: errors})
+def read_text(data, field, max_length, required=True, location="json"):
+    """A text up to `max_length` characters, stripped; None when optional and not sent."""
+    value = data.get(field)
+    if value is None and not required:
+        return None
+    if value is None:
+        raise invalid(field, MISSING, location)
+    if not isinstance(value, str) or not value.strip() or len(value) > max_length:
+        raise invalid(field, f"Length must be between 1 and {max_length}.", location)
+    return value.strip()
 
 
-PAGE_SIZE_DEFAULT = 20
-PAGE_SIZE_MAX = 100
+def read_bool(data, field, default=None):
+    """True or False; `default` when not sent (None = required)."""
+    value = data.get(field, default)
+    if value is None:
+        raise invalid(field, MISSING)
+    if not isinstance(value, bool):
+        raise invalid(field, "Not a valid boolean.")
+    return value
 
 
-def read_page_args(errors):
-    """?page= and ?page_size= (1 to 100, default 20); errors go into `errors`."""
-    numbers = {}
-    for name, default, largest in (("page", 1, None), ("page_size", PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX)):
-        text = request.args.get(name)
-        numbers[name] = default
-        if text is None:
-            continue
-        try:
-            value = int(text)
-        except ValueError:
-            errors[name] = ["Not a valid integer."]
-            continue
-        if largest is None and value < 1:
-            errors[name] = ["Must be greater than or equal to 1."]
-        elif largest is not None and not 1 <= value <= largest:
-            errors[name] = [f"Must be greater than or equal to 1 and less than or equal to {largest}."]
-        numbers[name] = value
-    return numbers["page"], numbers["page_size"]
+def read_int(data, field, lowest, highest):
+    value = data.get(field)
+    if value is None:
+        raise invalid(field, MISSING)
+    if isinstance(value, bool) or not isinstance(value, int) or not lowest <= value <= highest:
+        raise invalid(field, f"Enter a whole number from {lowest} to {highest}.")
+    return value
+
+
+def read_amount(value, lowest, highest):
+    """A rupee amount with 2 decimals between `lowest` and `highest`, or None if it is not one."""
+    try:
+        amount = Decimal(str(value)).quantize(Decimal("0.01"))
+    except InvalidOperation:
+        return None
+    if isinstance(value, bool) or value is None or not lowest <= amount <= highest:
+        return None
+    return amount
+
+
+def read_choice(data, field, choices, required=True, location="json"):
+    value = data.get(field)
+    if value is None and not required:
+        return None
+    if value is None:
+        raise invalid(field, MISSING, location)
+    if value not in list(choices):
+        raise invalid(field, f"Must be one of: {', '.join(choices)}.", location)
+    return value
 
 
 def read_uuid(value):
     """A UUID from a request value (text), or None when it is not one."""
-    if not isinstance(value, str):
-        return None
     try:
         return uuid.UUID(value)
-    except ValueError:
+    except (TypeError, ValueError, AttributeError):
         return None
+
+
+def read_id(data, field, required=True, location="json"):
+    """A UUID field; None when optional and not sent."""
+    value = data.get(field)
+    if value is None and not required:
+        return None
+    if read_uuid(value) is None:
+        raise invalid(field, MISSING if value is None else "Not a valid UUID.", location)
+    return read_uuid(value)
+
+
+def page_args():
+    """?page= (from 1) and ?page_size= (1 to 100, default 20)."""
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        return page, min(max(int(request.args.get("page_size", 20)), 1), 100)
+    except ValueError:
+        raise invalid("page", "Not a valid integer.", "query")
+
+
+def page_of(stmt, to_dict):
+    """One page of `stmt` as {items, page, page_size, total}."""
+    page, page_size = page_args()
+    result = db.paginate(stmt, page=page, per_page=page_size, error_out=False)
+    items = [to_dict(item) for item in result.items]
+    return {"items": items, "page": page, "page_size": page_size, "total": result.total}
 
 
 def iso(value):
@@ -131,20 +172,20 @@ def iso(value):
 
 def money(value):
     """An amount as text with 2 decimals, e.g. "1250.00" (None stays None)."""
-    if value is None:
-        return None
-    return f"{Decimal(value).quantize(Decimal('0.01')):f}"
+    return None if value is None else f"{Decimal(value).quantize(Decimal('0.01')):f}"
 
 
-# --- pagination --------------------------------------------------------------------------
-
-
-PAGE_SIZE_DEFAULT = 20
-PAGE_SIZE_MAX = 100
+def format_inr(amount):
+    """Indian digit grouping, e.g. 4500000 -> "₹45,00,000"."""
+    digits = str(int(Decimal(amount).quantize(Decimal(1), rounding=ROUND_HALF_UP)))
+    head, groups = digits[:-3], [digits[-3:]]
+    while head:
+        groups.insert(0, head[-2:])
+        head = head[:-2]
+    return "₹" + ",".join(groups)
 
 
 # --- passwords ---------------------------------------------------------------------------
-
 
 _hasher = PasswordHasher()
 
@@ -163,136 +204,30 @@ def verify_password(password_hash, password):
 
 # --- email -------------------------------------------------------------------------
 
-
-log = logging.getLogger(__name__)
-
 # Messages "sent" while MAIL_SUPPRESS_SEND is on (tests read and clear this list).
-outbox: list[EmailMessage] = []
-
-# The text of every email, rendered with Jinja (plain text, no HTML escaping).
-EMAIL_TEMPLATES = {
-    "ca_rejected": """Hello {{ name }},
-
-We could not verify your CA Helper profile. The reason:
-
-    {{ reason }}
-
-Correct your profile (or upload your Certificate of Practice again) and save it:
-it then goes back to the admin for another check.
-
-CA Helper
-""",
-    "ca_verified": """Hello {{ name }},
-
-Your CA Helper profile is verified. Businesses can now find you under "Find a CA"
-and send you requests.
-
-CA Helper
-""",
-    "engagement_accepted": """Hello {{ owner_name }},
-
-Good news: {{ ca_name }} has accepted your request at their listed prices.
-The filings in it are now marked "With CA".
-
-You can see the details in "My engagements" in CA Helper.
-
-CA Helper
-""",
-    "engagement_declined": """Hello {{ owner_name }},
-
-{{ ca_name }} has declined your request. The filings in it are free again, so you
-can request another CA from "Find a CA" in CA Helper.
-
-CA Helper
-""",
-    "engagement_requested": """Hello {{ ca_name }},
-
-{{ business_name }} has sent you a request for {{ filing_count }} filing{{ "s" if filing_count != 1 }}.
-
-Open "My engagements" in CA Helper to accept it at your listed prices or decline
-it.
-
-CA Helper
-""",
-    "notification": """Hello {{ name }},
-
-{{ title }}
-
-{{ body }}
-
-You can also read it in CA Helper under "Notification settings",
-where you can choose which emails you get.
-
-CA Helper
-""",
-    "password_changed": """Hello {{ name }},
-
-The password of your CA Helper account was just changed.
-
-If this was you, there is nothing to do. If it was not, reset your password at once with
-"Forgot password?" on the login page.
-
-CA Helper
-""",
-    "reminders": """Hello {{ name }},
-
-{% if lines|length == 1 %}One filing needs your attention:{% else %}{{ lines|length }} filings need your attention:{% endif %}
-{% for line in lines %}
-  - {{ line }}
-{%- endfor %}
-
-Open CA Helper to see each filing (your inbox under "Notification settings" lists them too).
-To change which emails you get, open "Notification settings".
-
-CA Helper
-""",
-    "reset_password": """Hello {{ name }},
-
-Someone asked to reset the password of your CA Helper account. Your code is:
-
-    {{ code }}
-
-It expires in {{ minutes }} minutes. Enter it on the "Reset your password" page.
-
-If this was not you, ignore this email: your password stays the same.
-
-CA Helper
-""",
-    "verify_email": """Hello {{ name }},
-
-Welcome to CA Helper. Your email verification code is:
-
-    {{ code }}
-
-It expires in {{ minutes }} minutes. Enter it on the "Verify your email" page to finish signing up.
-
-If you did not create a CA Helper account, you can ignore this email.
-
-CA Helper
-""",
-}
+outbox = []
 
 
 def send_email(to, subject, template, **context):
-    """Send one plain-text email. Returns True if it was handed to the SMTP server."""
+    """Send one plain-text email (the text is templates/email/<template>.txt). Returns True
+    if it was handed to the SMTP server."""
     config = current_app.config
     message = EmailMessage()
     message["From"] = config["MAIL_DEFAULT_SENDER"]
     message["To"] = to
     message["Subject"] = subject
-    message.set_content(Template(EMAIL_TEMPLATES[template]).render(**context))
-
+    message.set_content(render_template(f"email/{template}.txt", **context))
     if config["MAIL_SUPPRESS_SEND"]:
         outbox.append(message)
         return True
     try:
         with smtplib.SMTP(config["MAIL_SERVER"], config["MAIL_PORT"], timeout=10) as smtp:
             smtp.send_message(message)
+        return True
     except OSError as error:  # smtplib's errors are OSErrors too
         # Only the error type: its text can contain the recipient's address (PII).
         log.error("Could not send the %s email: %s", template, type(error).__name__)
         return False
-    return True
 
 
 # --- access control --------------------------------------------------------------------------
@@ -303,17 +238,10 @@ def current_user():
     return get_current_user()
 
 
-def current_business_or_none():
-    """The logged-in business user's registered business, or None before registration."""
-    return db.session.scalar(
-        select(Business).where(Business.user_id == current_user().id)
-    )
-
-
-def current_business():
+def current_business(required=True):
     """The logged-in owner's business. 404 BUSINESS_NOT_FOUND before registration."""
-    business = current_business_or_none()
-    if business is None:
+    business = db.session.scalar(select(Business).where(Business.user_id == current_user().id))
+    if business is None and required:
         raise ApiError(404, "BUSINESS_NOT_FOUND", "Register your business first.")
     return business
 
@@ -335,35 +263,21 @@ def roles_required(*roles):
     return decorator
 
 
-def login_required(view):
-    """Allow the endpoint for any logged-in, active user (every role)."""
-    return roles_required(*UserRole)(view)
-
-
-def require_ca_access(business_id):
-    """404 BUSINESS_NOT_FOUND unless the CA has an active engagement with it."""
-    from app import marketplace  # imported here: marketplace imports this module
-
-    ca_profile_id = marketplace.own_profile_id(current_user())
-    if ca_profile_id is None or not marketplace.ca_can_see_business(
-        ca_profile_id, business_id
-    ):
-        raise ApiError(404, "BUSINESS_NOT_FOUND", "This business was not found.")
+login_required = roles_required(*UserRole)  # any logged-in user
 
 
 # --- gstin -------------------------------------------------------------------------------
 
-
-_STATES_FILE = REPO_ROOT / "content" / "reference" / "gst_states.json"
-GST_STATES = json.loads(_STATES_FILE.read_text())["states"]
-_CODE_OF = {state["name"]: state["code"] for state in GST_STATES}
-
+GST_STATES = json.loads((REPO_ROOT / "content/reference/gst_states.json").read_text())["states"]
 _CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def state_code(name):
     """The GST code of a state or union territory, e.g. "27" for Maharashtra."""
-    return _CODE_OF.get(name)
+    for state in GST_STATES:
+        if state["name"] == name:
+            return state["code"]
+    return None
 
 
 def gstin_check_character(first_14):
@@ -389,23 +303,7 @@ def gstin_error(gstin, pan, state):
     return None
 
 
-# --- money -------------------------------------------------------------------------------
-
-
-def format_inr(amount):
-    digits = str(int(Decimal(amount).quantize(Decimal(1), rounding=ROUND_HALF_UP)))
-    head, tail = digits[:-3], digits[-3:]
-    groups = []
-    while len(head) > 2:
-        groups.insert(0, head[-2:])
-        head = head[:-2]
-    if head:
-        groups.insert(0, head)
-    return "₹" + ",".join(groups + [tail])
-
-
 # --- storage -----------------------------------------------------------------------------
-
 
 # Allowed file types and the bytes every such file starts with.
 ALLOWED_TYPES = {
@@ -415,13 +313,19 @@ ALLOWED_TYPES = {
 }
 
 
-def check_file(data, mime_type):
-    """400 FILE_EMPTY, FILE_TYPE_NOT_ALLOWED or FILE_TOO_LARGE."""
+def read_upload(field="file"):
+    """The uploaded file's bytes. 422 when missing; 400 FILE_EMPTY, FILE_TYPE_NOT_ALLOWED
+    or FILE_TOO_LARGE."""
+    upload = request.files.get(field)
+    if upload is None:
+        raise invalid(field, MISSING, "files")
+    data = upload.read()
     max_mb = current_app.config["MAX_UPLOAD_MB"]
     if not data:
         raise ApiError(400, "FILE_EMPTY", "The file is empty.")
-    start = ALLOWED_TYPES.get(mime_type)
+    start = ALLOWED_TYPES.get(upload.mimetype)
     if start is None or not data.startswith(start):
         raise ApiError(400, "FILE_TYPE_NOT_ALLOWED", "Upload a PDF, JPG or PNG file.")
     if len(data) > max_mb * 1024 * 1024:
         raise ApiError(400, "FILE_TOO_LARGE", f"The file is larger than {max_mb} MB.")
+    return upload, data

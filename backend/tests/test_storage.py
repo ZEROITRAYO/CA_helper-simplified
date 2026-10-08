@@ -1,12 +1,20 @@
-"""utils.check_file: only real PDF, JPG and PNG files under the size limit are accepted."""
+"""utils.read_upload: only real PDF, JPG and PNG files under the size limit are accepted."""
+
+import io
 
 import pytest
 
-from app import utils as storage
-from app.utils import ApiError
+from app.utils import ApiError, read_upload
 
 PDF = b"%PDF-1.4 a tiny test file"
 PNG = b"\x89PNG\r\n\x1a\n rest of a png"
+
+
+def check(app, data, mime_type):
+    """read_upload() in a request that uploads `data` as "file"."""
+    files = {"file": (io.BytesIO(data), "upload", mime_type)}
+    with app.test_request_context(method="POST", data=files, content_type="multipart/form-data"):
+        return read_upload()
 
 
 @pytest.mark.parametrize(
@@ -19,7 +27,7 @@ PNG = b"\x89PNG\r\n\x1a\n rest of a png"
 )
 def test_only_real_pdf_jpg_and_png_files_are_accepted(app, data, mime_type, code):
     with pytest.raises(ApiError) as error:
-        storage.check_file(data, mime_type)
+        check(app, data, mime_type)
     assert error.value.code == code
 
 
@@ -27,5 +35,6 @@ def test_files_over_the_limit_are_refused(app, monkeypatch):
     monkeypatch.setitem(app.config, "MAX_UPLOAD_MB", 1)
 
     with pytest.raises(ApiError) as error:
-        storage.check_file(PDF + b"x" * (1024 * 1024), "application/pdf")
+        check(app, PDF + b"x" * (1024 * 1024), "application/pdf")
     assert error.value.code == "FILE_TOO_LARGE"
+    assert check(app, PDF, "application/pdf")[1] == PDF

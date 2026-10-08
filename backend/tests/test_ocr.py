@@ -11,7 +11,6 @@ from datetime import date
 
 import pymupdf
 import pytest
-from werkzeug.datastructures import FileStorage
 
 from app import compliance as compliance_service, ocr
 from app.models import ComplianceItem, ComplianceStatus, Document, User, UserRole
@@ -305,19 +304,18 @@ def test_a_verified_filing_can_be_undone(client, owner, database):
     assert database.session.get(ComplianceItem, item.id).verified_at is None
 
 
-def test_the_ca_filing_path_is_verified_too(business_with_filings, database, make_user):
+def test_the_ca_filing_path_is_verified_too(app, business_with_filings, database, make_user):
     item = q1_gstr3b(database)
     item.status = ComplianceStatus.WITH_CA
     database.session.commit()
-    upload = FileStorage(
-        io.BytesIO(pdf_of(GSTR3B_Q1_ACK)), "ack.pdf", content_type="application/pdf"
-    )
+    files = {"file": (io.BytesIO(pdf_of(GSTR3B_Q1_ACK)), "ack.pdf", "application/pdf")}
 
-    filing = compliance_service.mark_filed_by_ca(
-        business_with_filings, make_user(role=UserRole.CA), item.id, upload=upload
-    )
+    with app.test_request_context(method="POST", data=files, content_type="multipart/form-data"):
+        compliance_service.record_filed(
+            item, business_with_filings.user_id, make_user(role=UserRole.CA), "ca"
+        )
 
-    assert filing.status == ComplianceStatus.FILED_VERIFIED
+    assert item.status == ComplianceStatus.FILED_VERIFIED
 
 
 # --- ON13: auto-fill -------------------------------------------------------------------

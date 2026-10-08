@@ -4,7 +4,7 @@ from app import create_app
 from app.utils import ApiError
 from tests.conftest import TEST_CONFIG
 
-EXPECTED_BLUEPRINTS = {"health", "auth", "compliance", "ca_workspace", "admin"}
+EXPECTED_BLUEPRINTS = {"auth", "compliance", "ca_workspace", "admin"}
 
 
 def test_every_blueprint_is_registered(app):

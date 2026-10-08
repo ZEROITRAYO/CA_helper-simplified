@@ -14,25 +14,16 @@ file per feature (auth.py, compliance.py, ...) and seed.py.
 import logging
 import os
 
-from flask import Blueprint, Flask, jsonify, redirect
+from flask import Flask, jsonify, redirect
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import (
-    admin,
-    alerts,
-    auth,
-    ca_workspace,
-    compliance,
-    documents,
-    marketplace,
-    onboarding,
-)
-from app.models import db
+from app import admin, alerts, auth, ca_workspace, compliance, documents, marketplace, onboarding
+from app.models import db, User
 from app.seed import register_commands
-from app.utils import error_body, register_error_handlers
+from app.utils import error_body, read_uuid, register_error_handlers
 
 log = logging.getLogger(__name__)
 
@@ -69,10 +60,6 @@ class Config:
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
 
 
-
-# --- Extensions -----------------------------------------------------------------------
-
-
 migrate = Migrate()
 jwt = JWTManager()
 
@@ -93,49 +80,21 @@ def _jwt_error(code, message):
 
 @jwt.user_lookup_loader
 def load_user(_header, payload):
-    # Returning None triggers user_not_found below.
-    return auth.get_user(payload["sub"])
+    # Returning None triggers ACCOUNT_INACTIVE below.
+    user_id = read_uuid(payload["sub"])
+    return db.session.get(User, user_id) if user_id else None
 
 
-@jwt.user_lookup_error_loader
-def user_not_found(_header, _payload):
-    return _jwt_error("ACCOUNT_INACTIVE", "This account no longer exists. Please log in again.")
-
-
-@jwt.unauthorized_loader
-def missing_token(_reason):
-    return _jwt_error("AUTH_REQUIRED", "Please log in.")
-
-
-@jwt.invalid_token_loader
-def invalid_token(_reason):
-    return _jwt_error("TOKEN_INVALID", "Your session is invalid. Please log in again.")
-
-
-@jwt.expired_token_loader
-def expired_token(_header, _payload):
-    return _jwt_error("TOKEN_EXPIRED", "Your session has expired. Please log in again.")
-
-
-# --- GET /api/health: is the API up and can it reach the database? -------------------
-
-health_bp = Blueprint("health", __name__, url_prefix="/api")
-
-
-@health_bp.get("/health")
-def health():
-    try:
-        db.session.execute(text("SELECT 1"))
-        database = "ok"
-    except SQLAlchemyError as exc:
-        # One line, not a traceback: this repeats on every check while the db is down.
-        cause = getattr(exc, "orig", None) or exc  # the driver's error, e.g. OperationalError
-        log.warning("Health check: database unavailable (%s)", type(cause).__name__)
-        db.session.rollback()
-        database = "unavailable"
-    if database == "ok":
-        return jsonify({"status": "ok", "database": database})
-    return jsonify({"status": "degraded", "database": database}), 503
+jwt.user_lookup_error_loader(
+    lambda _h, _p: _jwt_error("ACCOUNT_INACTIVE", "This account no longer exists. Please log in again.")
+)
+jwt.unauthorized_loader(lambda _reason: _jwt_error("AUTH_REQUIRED", "Please log in."))
+jwt.invalid_token_loader(
+    lambda _reason: _jwt_error("TOKEN_INVALID", "Your session is invalid. Please log in again.")
+)
+jwt.expired_token_loader(
+    lambda _h, _p: _jwt_error("TOKEN_EXPIRED", "Your session has expired. Please log in again.")
+)
 
 
 # --- The app factory ----------------------------------------------------------------------
@@ -143,40 +102,42 @@ def health():
 # Every feature route lives under this prefix; /api/health stays unversioned.
 API_PREFIX = "/api/v1"
 BLUEPRINTS = [
-    auth.bp,
-    onboarding.bp,
-    compliance.bp,
-    ca_workspace.bp,
-    marketplace.bp,
-    admin.bp,
-    alerts.bp,
+    auth.bp, onboarding.bp, compliance.bp, ca_workspace.bp, marketplace.bp, admin.bp, alerts.bp,
     documents.bp,
 ]
+
+
+def health():
+    """GET /api/health: is the API up and can it reach the database?"""
+    try:
+        db.session.execute(text("SELECT 1"))
+        return jsonify({"status": "ok", "database": "ok"})
+    except SQLAlchemyError as exc:
+        # One line, not a traceback: this repeats on every check while the db is down.
+        cause = getattr(exc, "orig", None) or exc  # the driver's error, e.g. OperationalError
+        log.warning("Health check: database unavailable (%s)", type(cause).__name__)
+        db.session.rollback()
+        return jsonify({"status": "degraded", "database": "unavailable"}), 503
 
 
 def create_app(test_config=None):
     """Build and configure a Flask app. The tests pass `test_config` to replace settings."""
     app = Flask(__name__)
     app.config.from_object(Config)
-    if test_config:
-        app.config.update(test_config)
+    app.config.update(test_config or {})
     # Plain log lines on the terminal: time, level, logger name, message.
     logging.basicConfig(
         level=app.config["LOG_LEVEL"], format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
-
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-
-    app.register_blueprint(health_bp)
     for bp in BLUEPRINTS:
         app.register_blueprint(bp, url_prefix=API_PREFIX)
-
+    app.add_url_rule("/api/health", "health", health)
     # The API has no pages of its own, so its bare root shows the health check instead
     # of a 404.
     app.add_url_rule("/", "root", lambda: redirect("/api/health"))
-
     register_error_handlers(app)
     register_commands(app)
     return app

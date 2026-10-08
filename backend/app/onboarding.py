@@ -1,79 +1,45 @@
-"""Registering a business, its regulatory profile (with a "why" for every line), the NIC
-activity code and reading a registration document to fill the form.
+"""Registering a business, its regulatory profile, the NIC activity code and reading a
+registration document to fill the form.
 
 The profile is computed from legal thresholds stored in `rule_thresholds`; no legal
 number is written in this file.
 """
 
 import re
-from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 
-from app import compliance, ocr, utils
+from app import compliance, ocr
 from app.models import (
-    Business,
-    EntityType,
-    GstScheme,
-    ItrForm,
-    MsmeTier,
-    NicCode,
-    RegulatoryProfile,
-    RuleThreshold,
-    UserRole,
-    db,
-    today_in_india,
-    utcnow,
+    Business, EntityType, GstScheme, ItrForm, MsmeTier, NicCode, RegulatoryProfile, RuleThreshold,
+    UserRole, db, today_in_india, utcnow,
 )
 from app.utils import (
-    GST_STATES,
-    MISSING,
-    ApiError,
-    current_business,
-    current_user,
-    format_inr,
-    gstin_error,
-    iso,
-    json_body,
-    money,
-    roles_required,
-    state_code,
-    validation_error,
+    GST_STATES, MISSING, ApiError, current_business, current_user, format_inr, gstin_error,
+    invalid, iso, json_body, money, read_amount, read_bool, read_choice, read_text, read_upload,
+    roles_required, state_code,
 )
-
 
 bp = Blueprint("onboarding", __name__)
 
 # Which version of the profile logic below produced a profile. Change it when the logic changes.
 RULE_VERSION = "v2"  # v2: QRMP is the user's choice; the audit line is split in two
 
-PAN_FORMAT = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")  # e.g. ABCDE1234F
-GSTIN_FORMAT = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$")  # 27ABCDE1234F1Z5
-TAN_FORMAT = re.compile(r"^[A-Z]{4}[0-9]{5}[A-Z]$")  # e.g. MUMA12345B
-UDYAM_FORMAT = re.compile(r"^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$")  # e.g. UDYAM-MH-01-0000001
-PHONE_FORMAT = re.compile(r"^[6-9][0-9]{9}$")  # 10-digit Indian mobile number
-MAX_AMOUNT = Decimal("9999999999.99")  # the column holds Numeric(12, 2)
-
-# Text fields of the form and their longest length.
-TEXT_FIELDS = {"legal_name": 200, "address": 500, "description": 1000}
-# Yes/no questions every business answers, and those that default to "no".
-REQUIRED_FLAGS = ("gst_registered", "deducts_tds", "pays_salary_above_limit")
-OPTIONAL_FLAGS = ("gst_composition", "gst_qrmp", "accounts_audited_other_law")
 # Codes typed by people: stored in capitals, and an empty code counts as not given.
-CODE_FIELDS = ("pan", "gstin", "tan", "cin_llpin", "udyam_number")
+CODE_FORMATS = {
+    "pan": (r"[A-Z]{5}[0-9]{4}[A-Z]", "Enter a valid PAN."),  # e.g. ABCDE1234F
+    "gstin": (r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]", "Enter a valid GSTIN."),  # 27ABCDE1234F1Z5
+    "tan": (r"[A-Z]{4}[0-9]{5}[A-Z]", "Enter a valid TAN."),  # e.g. MUMA12345B
+    "udyam_number": (r"UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}", "Enter a valid Udyam number."),
+    "cin_llpin": (r".{1,21}", "Length must be between 1 and 21."),
+}
 COMPANY_TYPES = (EntityType.LLP, EntityType.PRIVATE_LIMITED)
 
 # The profile lines compared in the "What changed" summary after an edit.
 COMPARED_LINES = (
-    "msme_tier",
-    "gst_scheme",
-    "itr_form",
-    "presumptive_eligible",
-    "audit_applicable",
-    "other_audit_applicable",
-    "files_24q",
-    "files_26q",
+    "msme_tier", "gst_scheme", "itr_form", "presumptive_eligible", "audit_applicable",
+    "other_audit_applicable", "files_24q", "files_26q",
 )
 
 
@@ -82,105 +48,53 @@ COMPARED_LINES = (
 
 def read_business_form(data):
     """Check the registration form and return the values. 422 VALIDATION_ERROR."""
-    errors = {}
-    values = {}
-    for field, max_length in TEXT_FIELDS.items():
-        text = data.get(field)
-        if text is None:
-            errors[field] = [MISSING]
-        elif not isinstance(text, str) or not 1 <= len(text) <= max_length:
-            errors[field] = [f"Length must be between 1 and {max_length}."]
-        else:
-            values[field] = text.strip()
-
-    entity_type = data.get("entity_type")
-    if entity_type is None:
-        errors["entity_type"] = [MISSING]
-    elif entity_type not in list(EntityType):
-        errors["entity_type"] = [f"Must be one of: {', '.join(EntityType)}."]
-    values["entity_type"] = entity_type
-
+    values = {
+        "legal_name": read_text(data, "legal_name", 200),
+        "address": read_text(data, "address", 500),
+        "description": read_text(data, "description", 1000),
+        "entity_type": read_choice(data, "entity_type", EntityType),
+    }
     state = data.get("state")
-    if state is None:
-        errors["state"] = [MISSING]
-    elif not isinstance(state, str) or state_code(state) is None:
-        errors["state"] = ["Choose your state from the list."]
+    if state_code(state) is None:
+        raise invalid("state", MISSING if state is None else "Choose your state from the list.")
     values["state"] = state
-
     for field in ("annual_turnover", "investment_amount"):
-        amount = data.get(field)
-        if amount is None:
-            errors[field] = [MISSING]
-            continue
-        try:
-            if isinstance(amount, bool):
-                raise InvalidOperation
-            amount = Decimal(str(amount)).quantize(Decimal("0.01"))
-        except InvalidOperation:
-            errors[field] = ["Not a valid number."]
-            continue
-        if not 0 <= amount <= MAX_AMOUNT:
-            errors[field] = [
-                f"Must be greater than or equal to 0 and less than or equal to {MAX_AMOUNT}."
-            ]
-        values[field] = amount
-
-    for field in REQUIRED_FLAGS + OPTIONAL_FLAGS:
-        flag = data.get(field)
-        if flag is None:
-            if field in REQUIRED_FLAGS:
-                errors[field] = [MISSING]
-            values[field] = False
-        elif not isinstance(flag, bool):
-            errors[field] = ["Not a valid boolean."]
-        else:
-            values[field] = flag
-
-    for field in CODE_FIELDS:
+        values[field] = read_amount(data.get(field), 0, 9999999999)  # the column holds Numeric(12, 2)
+        if values[field] is None:
+            message = MISSING if data.get(field) is None else "Enter an amount from 0 to 9999999999."
+            raise invalid(field, message)
+    # Yes/no questions every business answers, and those that default to "no".
+    for field in ("gst_registered", "deducts_tds", "pays_salary_above_limit"):
+        values[field] = read_bool(data, field)
+    for field in ("gst_composition", "gst_qrmp", "accounts_audited_other_law"):
+        values[field] = read_bool(data, field, default=False)
+    for field, (pattern, message) in CODE_FORMATS.items():
         code = data.get(field)
         if isinstance(code, str):
             code = code.strip().upper() or None
+        if code is not None and (not isinstance(code, str) or not re.fullmatch(pattern, code)):
+            raise invalid(field, message)
         values[field] = code
-    formats = [
-        ("pan", PAN_FORMAT, "Enter a valid PAN."),
-        ("gstin", GSTIN_FORMAT, "Enter a valid GSTIN."),
-        ("tan", TAN_FORMAT, "Enter a valid TAN."),
-        ("udyam_number", UDYAM_FORMAT, "Enter a valid Udyam number."),
-    ]
-    for field, pattern, message in formats:
-        code = values[field]
-        if code is not None and (not isinstance(code, str) or not pattern.match(code)):
-            errors[field] = [message]
     if values["pan"] is None:
-        errors["pan"] = ["Field may not be null." if "pan" in data else MISSING]
-    cin_llpin = values["cin_llpin"]
-    if cin_llpin is not None and (not isinstance(cin_llpin, str) or len(cin_llpin) > 21):
-        errors["cin_llpin"] = ["Length must be between 1 and 21."]
-
+        raise invalid("pan", MISSING)
     phone = data.get("phone")
-    if phone is None:
-        errors["phone"] = [MISSING]
-    elif not isinstance(phone, str) or not PHONE_FORMAT.match(phone):
-        errors["phone"] = ["Enter a 10-digit mobile number."]
+    if not isinstance(phone, str) or not re.fullmatch(r"[6-9][0-9]{9}", phone):  # an Indian mobile
+        raise invalid("phone", MISSING if phone is None else "Enter a 10-digit mobile number.")
     values["phone"] = phone
-    if errors:
-        raise validation_error(errors)
 
     # Fields that are required only for some businesses.
     if values["gst_registered"] and not values["gstin"]:
-        errors["gstin"] = ["Enter your GSTIN (you said you are GST registered)."]
+        raise invalid("gstin", "Enter your GSTIN (you said you are GST registered).")
     if values["gst_composition"] and not values["gst_registered"]:
-        errors["gst_composition"] = ["Only a GST-registered business can use composition."]
+        raise invalid("gst_composition", "Only a GST-registered business can use composition.")
     if values["deducts_tds"] and not values["tan"]:
-        errors["tan"] = ["Enter your TAN (you said you deduct TDS)."]
+        raise invalid("tan", "Enter your TAN (you said you deduct TDS).")
     if values["entity_type"] in COMPANY_TYPES and not values["cin_llpin"]:
-        errors["cin_llpin"] = ["Enter your CIN (company) or LLPIN (LLP)."]
-    if values["gst_registered"] and values["gstin"]:
+        raise invalid("cin_llpin", "Enter your CIN (company) or LLPIN (LLP).")
+    if values["gst_registered"]:
         problem = gstin_error(values["gstin"], values["pan"], values["state"])
         if problem:
-            errors["gstin"] = [problem]
-    if errors:
-        raise validation_error(errors)
+            raise invalid("gstin", problem)
 
     # Forget values that do not apply, e.g. a GSTIN sent with gst_registered = false.
     if not values["gst_registered"]:
@@ -196,82 +110,35 @@ def read_business_form(data):
     return values
 
 
-# --- JSON shapes -------------------------------------------------------------------------
-
-
-def business_to_dict(business):
-    """The business as its owner sees it (all fields, decrypted)."""
-    return {
-        "id": str(business.id),
-        "legal_name": business.legal_name,
-        "entity_type": business.entity_type,
-        "state": business.state,
-        "address": business.address,
-        "description": business.description,
-        "annual_turnover": money(business.annual_turnover),
-        "investment_amount": money(business.investment_amount),
-        "pan": business.pan,
-        "phone": business.phone,
-        "gst_registered": business.gst_registered,
-        "gstin": business.gstin,
-        "gst_composition": business.gst_composition,
-        "gst_qrmp": business.gst_qrmp,
-        "accounts_audited_other_law": business.accounts_audited_other_law,
-        "deducts_tds": business.deducts_tds,
-        "tan": business.tan,
-        "pays_salary_above_limit": business.pays_salary_above_limit,
-        "cin_llpin": business.cin_llpin,
-        "udyam_number": business.udyam_number,
-        # A state typed before the state list existed: the form asks for it again.
-        "state_needs_review": state_code(business.state) is None,
-    }
-
-
-def profile_to_dict(profile):
-    if profile is None:
-        return None
-    return {
-        "msme_tier": profile.msme_tier,
-        "gst_scheme": profile.gst_scheme,
-        "gst_registration_suggested": profile.gst_registration_suggested,
-        "itr_form": profile.itr_form,
-        "presumptive_eligible": profile.presumptive_eligible,
-        "audit_applicable": profile.audit_applicable,
-        "other_audit_applicable": profile.other_audit_applicable,
-        "files_24q": profile.files_24q,
-        "files_26q": profile.files_26q,
-        "roc_not_tracked": profile.roc_not_tracked,
-        "explanations": profile.explanations,
-        "rule_version": profile.rule_version,
-        "computed_at": iso(profile.computed_at),
-    }
-
-
-def nic_to_dict(nic):
-    if nic is None:
-        return None
-    return {"code": nic.code, "description": nic.description}
-
-
 def business_page(business):
     """{business, profile, nic_code}: what the business page shows."""
-    return {
-        "business": business_to_dict(business),
-        "profile": profile_to_dict(get_profile(business)),
-        "nic_code": nic_to_dict(nic_code_of(business)),
-    }
-
-
-def get_profile(business):
-    return db.session.scalar(
-        select(RegulatoryProfile).where(RegulatoryProfile.business_id == business.id)
+    fields = (
+        "legal_name", "entity_type", "state", "address", "description", "pan", "phone",
+        "gst_registered", "gstin", "gst_composition", "gst_qrmp", "accounts_audited_other_law",
+        "deducts_tds", "tan", "pays_salary_above_limit", "cin_llpin", "udyam_number",
     )
+    page_business = {"id": str(business.id)}
+    for field in fields:
+        page_business[field] = getattr(business, field)
+    page_business["annual_turnover"] = money(business.annual_turnover)
+    page_business["investment_amount"] = money(business.investment_amount)
+    # A state typed before the state list existed: the form asks for it again.
+    page_business["state_needs_review"] = state_code(business.state) is None
 
-
-def nic_code_of(business):
-    if business.nic_code_id is None:
-        return None
-    return db.session.get(NicCode, business.nic_code_id)
+    profile = db.session.scalar(select(RegulatoryProfile).where(RegulatoryProfile.business_id == business.id))
+    page_profile = None
+    if profile is not None:
+        page_profile = {line: getattr(profile, line) for line in COMPARED_LINES}
+        page_profile.update(
+            gst_registration_suggested=profile.gst_registration_suggested,
+            roc_not_tracked=profile.roc_not_tracked, explanations=profile.explanations,
+            rule_version=profile.rule_version, computed_at=iso(profile.computed_at),
+        )
+    nic = db.session.get(NicCode, business.nic_code_id) if business.nic_code_id else None
+    return {
+        "business": page_business, "profile": page_profile,
+        "nic_code": {"code": nic.code, "description": nic.description} if nic else None,
+    }
 
 
 # --- The regulatory profile --------------------------------------------------------------
@@ -280,8 +147,7 @@ def nic_code_of(business):
 def get_threshold(key, today):
     """The legal value `key` in force today (latest effective_from)."""
     row = db.session.scalar(
-        select(RuleThreshold)
-        .where(RuleThreshold.key == key, RuleThreshold.effective_from <= today)
+        select(RuleThreshold).where(RuleThreshold.key == key, RuleThreshold.effective_from <= today)
         .order_by(RuleThreshold.effective_from.desc())
     )
     if row is None:
@@ -290,167 +156,86 @@ def get_threshold(key, today):
 
 
 def compute_profile(business, today):
-    """Work out the business's regulatory profile, with a "why" for every line."""
+    """Work out the business's regulatory profile."""
     turnover = business.annual_turnover
-    investment = business.investment_amount
     entity = business.entity_type
-    why = {}
 
     # 1. MSME tier: the smallest tier whose investment AND turnover limits both fit.
     msme_tier = MsmeTier.NOT_MSME
-    why["msme_tier"] = "Investment or turnover is above the medium-enterprise limits."
-    for tier in (MsmeTier.MICRO, MsmeTier.SMALL, MsmeTier.MEDIUM):
-        max_investment = get_threshold(f"msme.{tier}.max_investment", today)
-        max_turnover = get_threshold(f"msme.{tier}.max_turnover", today)
-        if investment <= max_investment and turnover <= max_turnover:
+    for tier in (MsmeTier.MEDIUM, MsmeTier.SMALL, MsmeTier.MICRO):
+        if (business.investment_amount <= get_threshold(f"msme.{tier}.max_investment", today)
+                and turnover <= get_threshold(f"msme.{tier}.max_turnover", today)):
             msme_tier = tier
-            why["msme_tier"] = (
-                f"Investment {format_inr(investment)} is within {format_inr(max_investment)} and "
-                f"turnover {format_inr(turnover)} is within {format_inr(max_turnover)}."
-            )
-            break
 
-    # 2. GST scheme.
+    # 2. GST scheme. A business that is not registered but above the limit is told to ask a CA.
     registration_limit = get_threshold("gst.registration.min_turnover", today)
-    composition_limit = get_threshold("gst.composition.max_turnover", today)
-    qrmp_limit = get_threshold("gst.qrmp.max_turnover", today)
-    gst_registration_suggested = False
+    gst_registration_suggested = not business.gst_registered and turnover > registration_limit
     if not business.gst_registered:
         gst_scheme = GstScheme.NOT_REGISTERED
-        if turnover > registration_limit:
-            gst_registration_suggested = True
-            why["gst_scheme"] = (
-                f"Not registered, but turnover is above {format_inr(registration_limit)}: "
-                "you may need GST registration. Ask a CA."
-            )
-        else:
-            why["gst_scheme"] = (
-                f"Not registered; turnover is within {format_inr(registration_limit)}."
-            )
-    elif business.gst_composition and turnover <= composition_limit:
+    elif business.gst_composition and turnover <= get_threshold("gst.composition.max_turnover", today):
         gst_scheme = GstScheme.COMPOSITION
-        why["gst_scheme"] = (
-            "You chose the composition scheme and turnover is within "
-            f"{format_inr(composition_limit)}."
-        )
-    else:
-        note = ""
-        if business.gst_composition:
-            note = f"Composition is not allowed above {format_inr(composition_limit)}. "
-        if turnover > qrmp_limit:
-            gst_scheme = GstScheme.REGULAR_MONTHLY
-            why["gst_scheme"] = (
-                f"{note}Turnover is above {format_inr(qrmp_limit)}, so returns are monthly "
-                "(quarterly QRMP is not allowed)."
-            )
-        elif business.gst_qrmp:
-            gst_scheme = GstScheme.REGULAR_QRMP
-            why["gst_scheme"] = (
-                f"{note}You chose quarterly returns (QRMP), allowed because turnover is within "
-                f"{format_inr(qrmp_limit)}."
-            )
-        else:
-            gst_scheme = GstScheme.REGULAR_MONTHLY
-            why["gst_scheme"] = (
-                f"{note}You chose monthly returns. Quarterly (QRMP) is also allowed within "
-                f"{format_inr(qrmp_limit)}."
-            )
+    elif business.gst_qrmp and turnover <= get_threshold("gst.qrmp.max_turnover", today):
+        gst_scheme = GstScheme.REGULAR_QRMP
+    else:  # monthly returns: chosen, or quarterly (QRMP) is not allowed above the limit
+        gst_scheme = GstScheme.REGULAR_MONTHLY
 
     # 3. Presumptive scheme (section 44AD; section 58 of the 2025 Act): individuals, proprietors
     #    and partnership firms.
-    presumptive_limit = get_threshold("itr.presumptive_44ad.max_turnover", today)
-    if entity in COMPANY_TYPES:
-        presumptive_eligible = False
-        why["presumptive_eligible"] = "LLPs and companies cannot use the presumptive scheme."
-    elif turnover <= presumptive_limit:
-        presumptive_eligible = True
-        why["presumptive_eligible"] = f"Turnover is within {format_inr(presumptive_limit)}."
-    else:
-        presumptive_eligible = False
-        why["presumptive_eligible"] = f"Turnover is above {format_inr(presumptive_limit)}."
-
+    presumptive_eligible = (
+        entity not in COMPANY_TYPES and turnover <= get_threshold("itr.presumptive_44ad.max_turnover", today)
+    )
     # 4. Audits (either one moves the ITR due date later).
-    # 4a. Tax audit under section 44AB (section 63 of the 2025 Act), from turnover.
-    audit_limit = get_threshold("itr.audit_44ab.min_turnover", today)
-    if presumptive_eligible:
-        audit_applicable = False
-        why["audit_applicable"] = "No tax audit when you use the presumptive scheme."
-    elif turnover > audit_limit:
-        audit_applicable = True
-        why["audit_applicable"] = f"Turnover is above {format_inr(audit_limit)}."
-    else:
-        audit_applicable = False
-        why["audit_applicable"] = f"Turnover is within {format_inr(audit_limit)}."
-
+    # 4a. Tax audit under section 44AB (section 63 of the 2025 Act), from turnover; none
+    #     with the presumptive scheme.
+    audit_applicable = (
+        not presumptive_eligible and turnover > get_threshold("itr.audit_44ab.min_turnover", today)
+    )
     # 4b. Accounts audited under another law: companies always; partnerships and LLPs
     # answer the question on the form (whether it applies depends on their own rules).
-    if entity == EntityType.PRIVATE_LIMITED:
-        other_audit_applicable = True
-        why["other_audit_applicable"] = "A company's accounts are always audited (company law)."
-    elif entity in (EntityType.PARTNERSHIP, EntityType.LLP):
-        other_audit_applicable = business.accounts_audited_other_law
-        why["other_audit_applicable"] = (
-            "You said your accounts are audited under another law."
-            if other_audit_applicable
-            else "You said your accounts are not audited under another law."
-        )
-    else:
-        other_audit_applicable = False
-        why["other_audit_applicable"] = "Individuals and proprietors: only the tax audit applies."
+    other_audit_applicable = entity == EntityType.PRIVATE_LIMITED or (
+        entity in (EntityType.PARTNERSHIP, EntityType.LLP) and business.accounts_audited_other_law
+    )
 
     # 5. ITR form.
     if entity == EntityType.PRIVATE_LIMITED:
         itr_form = ItrForm.ITR_6
-        why["itr_form"] = "Companies file ITR-6."
     elif entity == EntityType.LLP:
         itr_form = ItrForm.ITR_5
-        why["itr_form"] = "LLPs file ITR-5."
     elif presumptive_eligible:
         itr_form = ItrForm.ITR_4
-        why["itr_form"] = "Presumptive income is filed in ITR-4."
     elif entity == EntityType.PARTNERSHIP:
         itr_form = ItrForm.ITR_5
-        why["itr_form"] = "Partnership firms outside the presumptive scheme file ITR-5."
     else:
         itr_form = ItrForm.ITR_3
-        why["itr_form"] = "Business or professional income outside the presumptive scheme: ITR-3."
-
-    # 6. TDS returns.
-    files_26q = business.deducts_tds
-    files_24q = business.deducts_tds and business.pays_salary_above_limit
-    why["files_24q"] = (
-        "You deduct TDS on salaries." if files_24q else "You do not deduct TDS on salaries."
-    )
-    why["files_26q"] = (
-        "You deduct TDS on other payments." if files_26q else "You do not deduct TDS."
-    )
 
     # 7. ROC/MCA filings are out of scope; LLPs and companies get a notice.
     roc_not_tracked = entity in COMPANY_TYPES
-    why["roc_not_tracked"] = (
-        "LLPs and companies also have ROC/MCA filings, which this app does not track."
-        if roc_not_tracked
-        else "No ROC/MCA filings for this business type."
-    )
-
+    explanations = {
+        "gst_scheme": (
+            f"Not registered, but turnover is above {format_inr(registration_limit)}: "
+            "you may need GST registration. Ask a CA." if gst_registration_suggested else ""
+        ),
+        "roc_not_tracked": (
+            "LLPs and companies also have ROC/MCA filings, which this app does not track."
+            if roc_not_tracked else ""
+        ),
+    }
     return {
-        "msme_tier": msme_tier,
-        "gst_scheme": gst_scheme,
-        "gst_registration_suggested": gst_registration_suggested,
-        "itr_form": itr_form,
-        "presumptive_eligible": presumptive_eligible,
-        "audit_applicable": audit_applicable,
+        "msme_tier": msme_tier, "gst_scheme": gst_scheme,
+        "gst_registration_suggested": gst_registration_suggested, "itr_form": itr_form,
+        "presumptive_eligible": presumptive_eligible, "audit_applicable": audit_applicable,
         "other_audit_applicable": other_audit_applicable,
-        "files_24q": files_24q,
-        "files_26q": files_26q,
-        "roc_not_tracked": roc_not_tracked,
-        "explanations": why,
-        "rule_version": RULE_VERSION,
+        # 6. TDS returns.
+        "files_24q": business.deducts_tds and business.pays_salary_above_limit,
+        "files_26q": business.deducts_tds,
+        "roc_not_tracked": roc_not_tracked, "explanations": explanations, "rule_version": RULE_VERSION,
     }
 
 
-# The business finds its NIC activity code with the search below; nothing is suggested.
-NIC_SEARCH_LIMIT = 20
+def resync_all_filings(today=None):
+    """Match every business's filings to the current rules (run by `flask seed`)."""
+    for profile in db.session.scalars(select(RegulatoryProfile)):
+        compliance.sync_filings(profile.business_id, profile, today or today_in_india())
 
 
 # --- Routes ------------------------------------------------------------------------------
@@ -461,19 +246,16 @@ NIC_SEARCH_LIMIT = 20
 def register_business():
     """Save the business, compute its profile and create this year's filings."""
     values = read_business_form(json_body())
-    user = current_user()
-    if db.session.scalar(select(Business.id).where(Business.user_id == user.id)):
+    if current_business(required=False):
         raise ApiError(409, "BUSINESS_EXISTS", "You have already registered your business.")
-
-    business = Business(user_id=user.id, **values)
+    business = Business(user_id=current_user().id, **values)
     db.session.add(business)
     db.session.flush()  # gives business.id
     today = today_in_india()
-    profile = RegulatoryProfile(
-        business_id=business.id, computed_at=utcnow(), **compute_profile(business, today)
-    )
+    profile = RegulatoryProfile(business_id=business.id, computed_at=utcnow(),
+                                **compute_profile(business, today))
     db.session.add(profile)
-    added = compliance.create_filings(business.id, profile, today)
+    compliance.sync_filings(business.id, profile, today)
     db.session.commit()
     return jsonify(business_page(business)), 201
 
@@ -488,31 +270,22 @@ def get_business_page():
 @roles_required(UserRole.BUSINESS)
 def update_business():
     """Save the edited form, recompute the profile and sync the filings."""
-    from app import marketplace  # imported here: marketplace imports this module
-
     business = current_business()
-    values = read_business_form(json_body())
-    for field, value in values.items():
+    for field, value in read_business_form(json_body()).items():
         setattr(business, field, value)
-
     today = today_in_india()
-    profile = get_profile(business)
+    profile = db.session.scalar(select(RegulatoryProfile).where(RegulatoryProfile.business_id == business.id))
     old = {line: getattr(profile, line) for line in COMPARED_LINES}
     for field, value in compute_profile(business, today).items():
         setattr(profile, field, value)
     profile.computed_at = utcnow()
-
-    filing_ids = [filing.id for filing in compliance.list_filings(business)]
-    keep = marketplace.open_filing_ids(filing_ids)
-    filings = compliance.sync_filings(business.id, profile, today, keep)
+    filings = compliance.sync_filings(business.id, profile, today)
     db.session.commit()
-
-    changed = []
-    for line in COMPARED_LINES:
-        new = getattr(profile, line)
-        if new != old[line]:
-            changed.append({"line": line, "old": old[line], "new": new})
     page = business_page(business)
+    changed = [
+        {"line": line, "old": old[line], "new": getattr(profile, line)}
+        for line in COMPARED_LINES if getattr(profile, line) != old[line]
+    ]
     page["changes"] = {"profile": changed, "filings": filings}
     return jsonify(page)
 
@@ -521,38 +294,29 @@ def update_business():
 @roles_required(UserRole.BUSINESS)
 def search_nic_codes():
     """Up to 20 codes whose code or description contains `q` (choosing a code by hand)."""
-    query = request.args.get("q", "")
-    if len(query) > 100:
-        raise validation_error({"q": ["Longer than maximum length 100."]}, "query")
-    query = query.strip()
+    query = request.args.get("q", "").strip()[:100]
     if len(query) < 2:
         return jsonify([])
     pattern = f"%{query}%"
-    stmt = (
-        select(NicCode)
-        .where(or_(NicCode.code.ilike(pattern), NicCode.description.ilike(pattern)))
-        .order_by(NicCode.code)
-        .limit(NIC_SEARCH_LIMIT)
-    )
-    return jsonify([nic_to_dict(nic) for nic in db.session.scalars(stmt)])
+    stmt = select(NicCode).where(or_(NicCode.code.ilike(pattern), NicCode.description.ilike(pattern)))
+    return jsonify([
+        {"code": nic.code, "description": nic.description}
+        for nic in db.session.scalars(stmt.order_by(NicCode.code).limit(20))
+    ])
 
 
 @bp.put("/onboarding/business/nic-code")
 @roles_required(UserRole.BUSINESS)
 def set_nic_code():
     """Save the NIC code the user confirmed. 422 UNKNOWN_NIC_CODE if it is not in the list."""
-    code = json_body().get("code")
-    if code is None:
-        raise validation_error({"code": [MISSING]})
-    if not isinstance(code, str) or not 1 <= len(code) <= 10:
-        raise validation_error({"code": ["Length must be between 1 and 10."]})
+    code = read_text(json_body(), "code", 10)
     business = current_business()
-    nic = db.session.scalar(select(NicCode).where(NicCode.code == code.strip()))
+    nic = db.session.scalar(select(NicCode).where(NicCode.code == code))
     if nic is None:
         raise ApiError(422, "UNKNOWN_NIC_CODE", "Choose a code from the NIC list.")
     business.nic_code_id = nic.id
     db.session.commit()
-    return jsonify(nic_to_dict(nic))
+    return jsonify({"code": nic.code, "description": nic.description})
 
 
 @bp.get("/onboarding/states")
@@ -566,73 +330,9 @@ def list_states():
 @roles_required(UserRole.BUSINESS)
 def autofill():
     """Suggest form values from a GST certificate or PAN card (read in memory only)."""
-    upload = request.files.get("file")
-    if upload is None:
-        raise validation_error({"file": [MISSING]}, "files")
-    data = upload.read()
-    utils.check_file(data, upload.mimetype)
+    upload, data = read_upload()
     try:
         text = ocr.extract_text(data, upload.mimetype)
     except ocr.OcrError as error:
-        raise ApiError(
-            422, "DOCUMENT_UNREADABLE", f"We could not read this file. {error}"
-        ) from error
-    found = ocr.read_registration(text)
-    return jsonify({"found": found})
-
-
-# --- For other modules -------------------------------------------------------------------
-
-
-def get_business(business_id):
-    return db.session.get(Business, business_id)
-
-
-def business_of_user(user):
-    """The user's business, or None before registration."""
-    return db.session.scalar(select(Business).where(Business.user_id == user.id))
-
-
-def get_msme_tier(business):
-    """The MSME tier of the business's profile, e.g. "micro" (None without a profile)."""
-    profile = get_profile(business)
-    return profile.msme_tier if profile else None
-
-
-def get_itr_form(business):
-    """The ITR form of the business's profile, e.g. "itr_5" (None without a profile)."""
-    profile = get_profile(business)
-    return profile.itr_form if profile else None
-
-
-def count_businesses():
-    return db.session.scalar(select(func.count(Business.id)))
-
-
-def business_ids_in_segment(entity_type, msme_tier):
-    """The businesses with this entity type and MSME tier (peer insights)."""
-    stmt = (
-        select(Business.id)
-        .join(RegulatoryProfile, RegulatoryProfile.business_id == Business.id)
-        .where(Business.entity_type == entity_type, RegulatoryProfile.msme_tier == msme_tier)
-    )
-    return set(db.session.scalars(stmt))
-
-
-def resync_all_filings(today=None):
-    """Match every business's filings to the current rules (run by `flask seed`)."""
-    from app import marketplace  # imported here: marketplace imports this module
-
-    today = today or today_in_india()
-    totals = {"businesses": 0, "added": 0, "removed": 0}
-    stmt = select(Business, RegulatoryProfile).join(
-        RegulatoryProfile, RegulatoryProfile.business_id == Business.id
-    )
-    for business, profile in db.session.execute(stmt).all():
-        filing_ids = [filing.id for filing in compliance.list_filings(business)]
-        keep = marketplace.open_filing_ids(filing_ids)
-        counts = compliance.sync_filings(business.id, profile, today, keep)
-        totals["businesses"] += 1
-        totals["added"] += counts["added"]
-        totals["removed"] += counts["removed"]
-    return totals
+        raise ApiError(422, "DOCUMENT_UNREADABLE", f"We could not read this file. {error}") from error
+    return jsonify({"found": ocr.read_registration(text)})

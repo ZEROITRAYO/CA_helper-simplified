@@ -25,23 +25,13 @@ class OcrError(Exception):
     """The file's text could not be read. The message says why (no personal data)."""
 
 
-def ocr_available():
-    """True when the `tesseract` program is installed (environment.yml / CI)."""
-    return shutil.which("tesseract") is not None
-
-
 def _read_picture(picture):
     """The text in a PNG or JPG picture, read by the tesseract program (English)."""
-    if not ocr_available():
+    if shutil.which("tesseract") is None:  # installed in the Docker image and in CI
         raise OcrError("Tesseract is not installed, so pictures cannot be read.")
     try:
-        result = subprocess.run(
-            ["tesseract", "stdin", "stdout", "-l", "eng"],
-            input=picture,
-            capture_output=True,
-            timeout=TESSERACT_TIMEOUT_SECONDS,
-            check=False,
-        )
+        result = subprocess.run(["tesseract", "stdin", "stdout", "-l", "eng"], input=picture,
+                                capture_output=True, timeout=TESSERACT_TIMEOUT_SECONDS, check=False)
     except subprocess.TimeoutExpired as error:
         raise OcrError("Reading the picture took too long.") from error
     if result.returncode != 0:
@@ -49,27 +39,25 @@ def _read_picture(picture):
     return result.stdout.decode("utf-8", errors="replace")
 
 
-def _read_pdf(data):
-    """The text of the first pages of a PDF; scanned pages are read as pictures."""
-    try:
-        pdf = pymupdf.open(stream=data, filetype="pdf")
-    except Exception as error:  # PyMuPDF raises several error types for broken files
-        raise OcrError("The PDF could not be opened.") from error
-    texts = []
-    with pdf:
-        for number in range(min(MAX_PAGES, pdf.page_count)):
-            page = pdf[number]
-            text = page.get_text()
-            if len(text.strip()) < MIN_PAGE_TEXT:
-                picture = page.get_pixmap(dpi=RENDER_DPI).tobytes("png")
-                text = _read_picture(picture)
-            texts.append(text)
-    return "\n".join(texts)
-
-
 def extract_text(data, mime_type):
-    """The text of a PDF, JPG or PNG file. Raises OcrError when no text could be read."""
-    text = _read_pdf(data) if mime_type == "application/pdf" else _read_picture(data)
+    """The text of a PDF, JPG or PNG file. Raises OcrError when no text could be read.
+    For a PDF: the text of the first pages; scanned pages are read as pictures."""
+    if mime_type != "application/pdf":
+        text = _read_picture(data)
+    else:
+        try:
+            pdf = pymupdf.open(stream=data, filetype="pdf")
+        except Exception as error:  # PyMuPDF raises several error types for broken files
+            raise OcrError("The PDF could not be opened.") from error
+        texts = []
+        with pdf:
+            for number in range(min(MAX_PAGES, pdf.page_count)):
+                page = pdf[number]
+                text = page.get_text()
+                if len(text.strip()) < MIN_PAGE_TEXT:
+                    text = _read_picture(page.get_pixmap(dpi=RENDER_DPI).tobytes("png"))
+                texts.append(text)
+        text = "\n".join(texts)
     if not text.strip():
         raise OcrError("No text was found in the file.")
     return text

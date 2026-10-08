@@ -102,7 +102,7 @@ def test_pagination(client, business, auth_headers, add_ca):
 
 
 @pytest.mark.parametrize(
-    "query", ["specialization=gstr_9", "language=klingon", "page=0", "page_size=101"]
+    "query", ["specialization=gstr_9", "language=klingon", "page=two"]
 )
 def test_invalid_filters_are_rejected(client, business, auth_headers, query):
     response = client.get(f"{URL}?{query}", headers=auth_headers(business))

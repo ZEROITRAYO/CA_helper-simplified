@@ -56,7 +56,12 @@ def filing(database, form_code, period_label) -> ComplianceItem:
 
 
 def estimate(business, item, tax_due=None, today=date(2026, 7, 23)):
-    return alerts_service.estimate_penalty(business, item.id, tax_due, today=today)
+    """The estimate of one filing, with its amounts as Decimals."""
+    result = alerts_service.estimate(item, today, tax_due)
+    for key in ("late_fee", "interest", "total"):
+        if result[key] is not None:
+            result[key] = Decimal(result[key])
+    return result
 
 
 # --- AL4: the seeded rules ----------------------------------------------------------------
@@ -214,17 +219,21 @@ def test_not_late_and_filed_filings_have_no_penalty(business_with_filings, rules
     assert (q2["status"], q2["days_late"], q2["late_fee"]) == ("not_late", 0, None)
 
 
-def test_exposure_adds_the_late_fees_of_overdue_filings(business_with_filings, rules, database):
+def test_exposure_adds_the_late_fees_of_overdue_filings(
+    client, business_with_filings, rules, database, auth_headers, monkeypatch
+):
     rules["gstr_1"].late_fee_per_day = Decimal("10")
     rules["gstr_1"].annual_interest_rate = Decimal("12")  # interest is never in the total
     database.session.commit()
+    monkeypatch.setattr(alerts_service, "today_in_india", lambda: date(2026, 7, 23))
+    owner = database.session.get(User, business_with_filings.user_id)
 
-    result = alerts_service.penalty_exposure(business_with_filings, today=date(2026, 7, 23))
+    result = client.get(f"{BASE}/penalties", headers=auth_headers(owner)).get_json()
 
     # Late on 23 Jul: GSTR-1 Q1 (10 days) and GSTR-3B Q1 (1 day, no confirmed amount).
     assert result["overdue_count"] == 2
     assert (result["estimated_count"], result["pending_count"]) == (1, 1)
-    assert result["total_late_fees"] == Decimal("100.00")
+    assert result["total_late_fees"] == "100.00"
     assert result["label"] == "Estimate (rules pending verification)"
 
 

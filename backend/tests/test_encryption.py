@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 import pytest
+from cryptography.fernet import InvalidToken
 from sqlalchemy import select, text
 
 from app.models import Business, decrypt, encrypt, EntityType
@@ -73,5 +74,5 @@ def test_a_wrong_key_is_reported_clearly(app, monkeypatch):
         app.config, "FIELD_ENCRYPTION_KEY", "Q2FIZWxwZXItdGVzdC1rZXktdGhhdC1pcy13cm9uZyE="
     )
 
-    with pytest.raises(RuntimeError, match="not the key it was encrypted with"):
+    with pytest.raises(InvalidToken):  # not the key it was encrypted with
         decrypt(token)

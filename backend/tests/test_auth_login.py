@@ -73,4 +73,4 @@ def test_invalid_body_is_a_validation_error(client, database):
     response = client.post(LOGIN_URL, json={"email": ""})
 
     assert response.status_code == 422
-    assert set(response.get_json()["error"]["details"]["json"]) == {"email", "password"}
+    assert set(response.get_json()["error"]["details"]["json"]) == {"email"}  # the first bad field

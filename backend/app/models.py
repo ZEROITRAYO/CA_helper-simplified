@@ -7,25 +7,12 @@ from decimal import Decimal
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 from flask import current_app
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import (
-    Boolean,
-    CheckConstraint,
-    Date,
-    DateTime,
-    ForeignKey,
-    func,
-    Index,
-    Integer,
-    LargeBinary,
-    MetaData,
-    Numeric,
-    SmallInteger,
-    String,
-    Text,
-    UniqueConstraint,
+    Boolean, CheckConstraint, Date, DateTime, ForeignKey, func, Index, Integer, LargeBinary,
+    MetaData, Numeric, SmallInteger, String, Text, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -66,28 +53,21 @@ def today_in_india():
     return datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
 
-class TimestampMixin:
-    """`created_at` and `updated_at`, stored as timezone-aware UTC.
-
-    Python sets both on insert and `updated_at` on every ORM update; the
-    database default `now()` covers rows inserted with raw SQL.
-    Bulk `UPDATE` statements bypass `onupdate`, so set `updated_at` there yourself.
-    """
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, server_default=func.now()
-    )
+def time_column(**options):
+    return mapped_column(DateTime(timezone=True), **options)
 
 
-class BaseModel(TimestampMixin, db.Model):
-    """Abstract base for every table: a UUID primary key plus timestamps."""
+class BaseModel(db.Model):
+    """Abstract base for every table: a UUID primary key plus `created_at` and `updated_at`
+    (UTC; the database default `now()` covers rows inserted with raw SQL)."""
 
     __abstract__ = True
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = time_column(default=utcnow, server_default=func.now())
+    updated_at: Mapped[datetime] = time_column(
+        default=utcnow, onupdate=utcnow, server_default=func.now()
+    )
 
 
 # --- enums -------------------------------------------------------------------------------
@@ -116,26 +96,22 @@ class FormCode(StrEnum):
 # --- encryption --------------------------------------------------------------------------
 
 
-KEY_HELP = (
-    "Generate one with:\n"
-    "  docker compose exec backend python -c "
-    '"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"\n'
-    "and put it in .env as FIELD_ENCRYPTION_KEY=... (see .env.example)."
-)
-
-
 def _fernet():
     key = current_app.config.get("FIELD_ENCRYPTION_KEY")
     if not key:
-        raise RuntimeError(f"FIELD_ENCRYPTION_KEY is not set. {KEY_HELP}")
-    try:
-        return Fernet(key)
-    except ValueError as error:
-        raise RuntimeError(f"FIELD_ENCRYPTION_KEY is not a valid Fernet key. {KEY_HELP}") from error
+        raise RuntimeError(
+            "FIELD_ENCRYPTION_KEY is not set. Generate one with: docker compose exec backend "
+            'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+        )
+    return Fernet(key)
 
 
 def encrypt(value):
     return _fernet().encrypt(value.encode()).decode()
+
+
+def decrypt(token):
+    return _fernet().decrypt(token.encode()).decode()
 
 
 def encrypt_bytes(data):
@@ -144,23 +120,7 @@ def encrypt_bytes(data):
 
 
 def decrypt_bytes(token):
-    try:
-        return _fernet().decrypt(token)
-    except InvalidToken as error:
-        raise RuntimeError(
-            "A stored file cannot be decrypted: FIELD_ENCRYPTION_KEY is not the key it was "
-            "encrypted with."
-        ) from error
-
-
-def decrypt(token):
-    try:
-        return _fernet().decrypt(token.encode()).decode()
-    except InvalidToken as error:
-        raise RuntimeError(
-            "An encrypted value cannot be decrypted: FIELD_ENCRYPTION_KEY is not the key it was "
-            "encrypted with."
-        ) from error
+    return _fernet().decrypt(token)
 
 
 class EncryptedString(TypeDecorator):
@@ -190,9 +150,9 @@ class User(BaseModel):
     full_name: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(50))
     # Set when the user enters the code we emailed them; login is refused while it is empty.
-    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_verified_at: Mapped[datetime | None] = time_column()
     # When the user accepted the terms (set by signup in a later task; empty until then).
-    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terms_accepted_at: Mapped[datetime | None] = time_column()
     # The user's one switch for notification emails (codes and password emails always go out).
     email_notifications: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
@@ -216,8 +176,8 @@ class EmailOtp(BaseModel):
     user: Mapped[User] = relationship()
     purpose: Mapped[str] = mapped_column(String(50))
     code_hash: Mapped[str] = mapped_column(String(255))  # argon2 hash of the 6 digits
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = time_column()
+    used_at: Mapped[datetime | None] = time_column()
 
 
 # --- onboarding --------------------------------------------------------------------------
@@ -266,17 +226,13 @@ class Business(BaseModel):
 
     __tablename__ = "businesses"
     __table_args__ = (
-        CheckConstraint(
-            "NOT gst_registered OR gstin IS NOT NULL", name="gstin_when_gst_registered"
-        ),
+        CheckConstraint("NOT gst_registered OR gstin IS NOT NULL", name="gstin_when_gst_registered"),
         CheckConstraint("NOT deducts_tds OR tan IS NOT NULL", name="tan_when_deducts_tds"),
         CheckConstraint(
             "entity_type NOT IN ('llp', 'private_limited') OR cin_llpin IS NOT NULL",
             name="cin_llpin_for_llp_and_company",
         ),
-        CheckConstraint(
-            "annual_turnover >= 0 AND investment_amount >= 0", name="amounts_not_negative"
-        ),
+        CheckConstraint("annual_turnover >= 0 AND investment_amount >= 0", name="amounts_not_negative"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True)
@@ -311,7 +267,7 @@ class Business(BaseModel):
 
 
 class RegulatoryProfile(BaseModel):
-    """The computed profile of one business, with a "why" for every line."""
+    """The computed profile of one business."""
 
     __tablename__ = "regulatory_profiles"
 
@@ -333,10 +289,11 @@ class RegulatoryProfile(BaseModel):
     files_26q: Mapped[bool] = mapped_column(Boolean)
     # LLPs and companies: ROC/MCA filings exist but are not tracked (a notice in the UI).
     roc_not_tracked: Mapped[bool] = mapped_column(Boolean)
+    # The two notices the profile page shows: "gst_scheme" and "roc_not_tracked".
     explanations: Mapped[dict] = mapped_column(JSONB)
     # Which set of rules produced it, so a rule change can trigger a recompute.
     rule_version: Mapped[str] = mapped_column(String(50))
-    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    computed_at: Mapped[datetime] = time_column()
 
 
 class RuleThreshold(BaseModel):
@@ -345,9 +302,7 @@ class RuleThreshold(BaseModel):
     __tablename__ = "rule_thresholds"
     __table_args__ = (
         UniqueConstraint("key", "effective_from"),
-        CheckConstraint(
-            "effective_to IS NULL OR effective_to > effective_from", name="valid_period"
-        ),
+        CheckConstraint("effective_to IS NULL OR effective_to > effective_from", name="valid_period"),
     )
 
     key: Mapped[str] = mapped_column(String(100))  # e.g. "gst_registration_limit_goods"
@@ -389,9 +344,7 @@ class ObligationTemplate(BaseModel):
     __tablename__ = "obligation_templates"
     __table_args__ = (
         UniqueConstraint("form_code", "frequency", "effective_from"),
-        CheckConstraint(
-            "effective_to IS NULL OR effective_to > effective_from", name="valid_period"
-        ),
+        CheckConstraint("effective_to IS NULL OR effective_to > effective_from", name="valid_period"),
     )
 
     form_code: Mapped[str] = mapped_column(String(50))
@@ -425,17 +378,13 @@ class ComplianceItem(BaseModel):
     period_start: Mapped[date] = mapped_column(Date)
     period_end: Mapped[date] = mapped_column(Date)
     due_date: Mapped[date] = mapped_column(Date, index=True)
-    status: Mapped[str] = mapped_column(
-        String(50), default=ComplianceStatus.UPCOMING
-    )
+    status: Mapped[str] = mapped_column(String(50), default=ComplianceStatus.UPCOMING)
     # Self-filing or through a CA; empty until the business chooses.
     filing_path: Mapped[str | None] = mapped_column(String(50))
-    filed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    filed_at: Mapped[datetime | None] = time_column()
     acknowledgement_no: Mapped[str | None] = mapped_column(String(50))  # ARN / ack number
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    acknowledgement_document_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("documents.id")
-    )
+    verified_at: Mapped[datetime | None] = time_column()
+    acknowledgement_document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))
 
 
 class ChecklistTick(BaseModel):
@@ -503,13 +452,9 @@ class ComplianceItemDocument(BaseModel):
         CheckConstraint("checklist_key <> ''", name="checklist_key_not_empty"),
     )
 
-    compliance_item_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("compliance_items.id"), index=True
-    )
+    compliance_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("compliance_items.id"), index=True)
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), index=True)
-    checklist_key: Mapped[str] = mapped_column(
-        String(50), default="general", server_default="general"
-    )
+    checklist_key: Mapped[str] = mapped_column(String(50), default="general", server_default="general")
     linked_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
 
 
@@ -540,10 +485,8 @@ class Notification(BaseModel):
     type: Mapped[str] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(String(2000))
-    link: Mapped[str | None] = mapped_column(
-        String(300)
-    )  # an app path, e.g. "/business/compliance"
-    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    link: Mapped[str | None] = mapped_column(String(300))  # an app path, e.g. "/business/compliance"
+    read_at: Mapped[datetime | None] = time_column()
 
 
 class ReminderLog(BaseModel):
@@ -554,7 +497,7 @@ class ReminderLog(BaseModel):
 
     compliance_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("compliance_items.id"))
     kind: Mapped[str] = mapped_column(String(50))
-    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime] = time_column()
 
 
 class PenaltyRule(BaseModel):
@@ -563,17 +506,13 @@ class PenaltyRule(BaseModel):
     __tablename__ = "penalty_rules"
     __table_args__ = (
         UniqueConstraint("form_code", "effective_from"),
-        CheckConstraint(
-            "effective_to IS NULL OR effective_to > effective_from", name="valid_period"
-        ),
+        CheckConstraint("effective_to IS NULL OR effective_to > effective_from", name="valid_period"),
         CheckConstraint(
             "late_fee_per_day >= 0 AND annual_interest_rate >= 0"
             " AND (max_late_fee IS NULL OR max_late_fee >= 0)",
             name="amounts_not_negative",
         ),
-        CheckConstraint(
-            "flat_late_fee IS NULL OR flat_late_fee >= 0", name="flat_late_fee_not_negative"
-        ),
+        CheckConstraint("flat_late_fee IS NULL OR flat_late_fee >= 0", name="flat_late_fee_not_negative"),
     )
 
     # Every amount may be empty (NULL) while it is not confirmed from an official source.
@@ -601,52 +540,24 @@ class CaVerificationStatus(StrEnum):
 
 # The work a CA can be tagged with: the seven forms we track, then broader areas.
 CA_SPECIALIZATIONS = (
-    "itr",
-    "gstr_1",
-    "gstr_3b",
-    "cmp_08",
-    "gstr_4",
-    "tds_24q",
-    "tds_26q",
-    "gst_registration",
-    "tax_audit",
-    "accounting_bookkeeping",
-    "income_tax_notices",
-    "company_llp_compliance",
+    "itr", "gstr_1", "gstr_3b", "cmp_08", "gstr_4", "tds_24q", "tds_26q", "gst_registration",
+    "tax_audit", "accounting_bookkeeping", "income_tax_notices", "company_llp_compliance",
     "startup_msme_advisory",
 )
 
 # The specialization each catalog service (by code) belongs to. A CA who prices a service
 # should have its specialization; the services page warns otherwise.
 SERVICE_SPECIALIZATIONS = {
-    "itr_presumptive": "itr",
-    "itr_business": "itr",
-    "itr_firm_company": "itr",
-    "gstr_1": "gstr_1",
-    "gstr_3b": "gstr_3b",
-    "cmp_08": "cmp_08",
-    "gstr_4": "gstr_4",
-    "tds_24q": "tds_24q",
-    "tds_26q": "tds_26q",
-    "gst_registration": "gst_registration",
-    "tax_audit": "tax_audit",
-    "bookkeeping": "accounting_bookkeeping",
+    "itr_presumptive": "itr", "itr_business": "itr", "itr_firm_company": "itr",
+    "gstr_1": "gstr_1", "gstr_3b": "gstr_3b", "cmp_08": "cmp_08", "gstr_4": "gstr_4",
+    "tds_24q": "tds_24q", "tds_26q": "tds_26q", "gst_registration": "gst_registration",
+    "tax_audit": "tax_audit", "bookkeeping": "accounting_bookkeeping",
     "income_tax_notice": "income_tax_notices",
 }
 
 CA_LANGUAGES = (
-    "english",
-    "hindi",
-    "bengali",
-    "gujarati",
-    "kannada",
-    "malayalam",
-    "marathi",
-    "odia",
-    "punjabi",
-    "tamil",
-    "telugu",
-    "urdu",
+    "english", "hindi", "bengali", "gujarati", "kannada", "malayalam", "marathi", "odia",
+    "punjabi", "tamil", "telugu", "urdu",
 )
 
 
@@ -672,12 +583,10 @@ class CaProfile(BaseModel):
     capacity: Mapped[int] = mapped_column(Integer)
     years_experience: Mapped[int] = mapped_column(Integer)
     about: Mapped[str] = mapped_column(String(500), default="", server_default="")
-    verification_status: Mapped[str] = mapped_column(
-        String(50), default=CaVerificationStatus.PENDING
-    )
+    verification_status: Mapped[str] = mapped_column(String(50), default=CaVerificationStatus.PENDING)
     # Set by the admin: why a profile was rejected; when and by whom it was verified.
     rejection_reason: Mapped[str | None] = mapped_column(String(500))
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verified_at: Mapped[datetime | None] = time_column()
     verified_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     # The uploaded Certificate of Practice (a document owned by the CA's user).
     cop_document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))
@@ -740,13 +649,13 @@ class Engagement(BaseModel):
 
     business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
     ca_profile_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ca_profiles.id"), index=True)
-    status: Mapped[str] = mapped_column(
-        String(50), default=EngagementStatus.REQUESTED
-    )
-    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ca: Mapped[CaProfile] = relationship()
+    business: Mapped[Business] = relationship()
+    status: Mapped[str] = mapped_column(String(50), default=EngagementStatus.REQUESTED)
+    requested_at: Mapped[datetime] = time_column(default=utcnow)
+    responded_at: Mapped[datetime | None] = time_column()
+    activated_at: Mapped[datetime | None] = time_column()
+    completed_at: Mapped[datetime | None] = time_column()
 
 
 class EngagementItem(BaseModel):
@@ -762,10 +671,10 @@ class EngagementItem(BaseModel):
     )
 
     engagement_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("engagements.id"), index=True)
-    compliance_item_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("compliance_items.id"), index=True
-    )
+    compliance_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("compliance_items.id"), index=True)
+    filing: Mapped[ComplianceItem] = relationship()
     service_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("service_catalog.id"))
+    service: Mapped[CatalogService] = relationship()
     # The CA's price from their menu when requested, in rupees.
     listed_price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     # The price agreed when the CA accepts (the listed price); empty until then.
@@ -798,13 +707,13 @@ class DocumentRequest(BaseModel):
     __tablename__ = "document_requests"
 
     engagement_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("engagements.id"), index=True)
+    engagement: Mapped[Engagement] = relationship()
     compliance_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("compliance_items.id"))
+    filing: Mapped[ComplianceItem] = relationship()
     # The checklist entry asked for (content/forms/<FORM>/checklist.yaml), or "general".
     checklist_key: Mapped[str] = mapped_column(String(50))
     message: Mapped[str] = mapped_column(String(1000))
-    status: Mapped[str] = mapped_column(
-        String(50), default=DocumentRequestStatus.OPEN
-    )
-    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(50), default=DocumentRequestStatus.OPEN)
+    fulfilled_at: Mapped[datetime | None] = time_column()
     # The file that answered it (empty until fulfilled).
     document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))

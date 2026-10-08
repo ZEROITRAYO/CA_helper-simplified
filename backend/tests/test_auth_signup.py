@@ -99,7 +99,7 @@ def test_signup_needs_a_name_and_a_real_email(client, database):
     response = signup(client, full_name="   ", email="not-an-email")
 
     assert response.status_code == 422
-    assert set(response.get_json()["error"]["details"]["json"]) == {"full_name", "email"}
+    assert set(response.get_json()["error"]["details"]["json"]) == {"full_name"}  # the first bad field
 
 
 def test_login_is_refused_until_the_email_is_verified(client, database):

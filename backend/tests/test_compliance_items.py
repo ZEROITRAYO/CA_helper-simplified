@@ -4,7 +4,8 @@ from datetime import date
 
 import pytest
 
-from app.compliance import create_filings, sync_filings
+from app import compliance as compliance_service
+from app.compliance import sync_filings
 from app.models import (
     Business,
     ComplianceItem,
@@ -62,7 +63,7 @@ def items(database) -> list[ComplianceItem]:
 
 
 def test_qrmp_business_with_tds(business, database):
-    added = create_filings(business.id, profile(), TODAY)
+    added = sync_filings(business.id, profile(), TODAY)["added"]
     database.session.commit()
 
     by_form = {}
@@ -79,7 +80,7 @@ def test_qrmp_business_with_tds(business, database):
 
 
 def test_filings_start_upcoming_with_their_dates(business, database):
-    create_filings(business.id, profile(), TODAY)
+    sync_filings(business.id, profile(), TODAY)
     database.session.commit()
 
     itr = database.session.query(ComplianceItem).filter_by(form_code="itr").one()
@@ -90,7 +91,7 @@ def test_filings_start_upcoming_with_their_dates(business, database):
 
 
 def test_monthly_business_gets_one_filing_per_month(business, database):
-    create_filings(business.id, profile(gst_scheme=GstScheme.REGULAR_MONTHLY), TODAY)
+    sync_filings(business.id, profile(gst_scheme=GstScheme.REGULAR_MONTHLY), TODAY)
     database.session.commit()
 
     gstr_3b = [item for item in items(database) if item.form_code == "gstr_3b"]
@@ -100,7 +101,7 @@ def test_monthly_business_gets_one_filing_per_month(business, database):
 
 
 def test_composition_business(business, database):
-    create_filings(business.id, profile(gst_scheme=GstScheme.COMPOSITION), TODAY)
+    sync_filings(business.id, profile(gst_scheme=GstScheme.COMPOSITION), TODAY)
     database.session.commit()
 
     forms = {item.form_code for item in items(database)}
@@ -108,9 +109,9 @@ def test_composition_business(business, database):
 
 
 def test_running_again_adds_nothing(business, database):
-    first = create_filings(business.id, profile(), TODAY)
+    first = sync_filings(business.id, profile(), TODAY)["added"]
     database.session.commit()
-    second = create_filings(business.id, profile(), TODAY)
+    second = sync_filings(business.id, profile(), TODAY)["added"]
     database.session.commit()
 
     assert first > 0
@@ -118,7 +119,7 @@ def test_running_again_adds_nothing(business, database):
 
 
 def test_list_is_sorted_by_due_date(client, business, auth_headers, database):
-    create_filings(business.id, profile(), TODAY)
+    sync_filings(business.id, profile(), TODAY)
     database.session.commit()
     user = database.session.get(User, business.user_id)
     body = client.get(URL, headers=auth_headers(user)).get_json()
@@ -145,7 +146,7 @@ def by_key(database) -> dict:
 
 
 def test_filings_whose_due_date_passed_start_overdue(business, database):
-    create_filings(business.id, profile(), TODAY)
+    sync_filings(business.id, profile(), TODAY)
     database.session.commit()
 
     filings = by_key(database)
@@ -154,7 +155,7 @@ def test_filings_whose_due_date_passed_start_overdue(business, database):
 
 
 def test_a_filing_that_no_longer_applies_is_deleted(business, database):
-    create_filings(business.id, profile(), TODAY)
+    sync_filings(business.id, profile(), TODAY)
     database.session.commit()
 
     counts = sync_filings(business.id, profile(files_26q=False), TODAY)
@@ -166,7 +167,7 @@ def test_a_filing_that_no_longer_applies_is_deleted(business, database):
 
 
 def test_a_filing_that_applies_again_is_added_again(business, database):
-    create_filings(business.id, profile(), TODAY)
+    sync_filings(business.id, profile(), TODAY)
     database.session.commit()
     sync_filings(business.id, profile(files_26q=False), TODAY)
     database.session.commit()
@@ -178,8 +179,8 @@ def test_a_filing_that_applies_again_is_added_again(business, database):
     assert database.session.query(ComplianceItem).filter_by(form_code="tds_26q").count() == 4
 
 
-def test_filed_and_ca_filings_are_kept(business, database):
-    create_filings(business.id, profile(), TODAY)
+def test_filed_and_ca_filings_are_kept(business, database, monkeypatch):
+    sync_filings(business.id, profile(), TODAY)
     database.session.commit()
     filings = by_key(database)
     filings[("tds_26q", "Q1 2026-27")].status = ComplianceStatus.FILED
@@ -187,7 +188,9 @@ def test_filed_and_ca_filings_are_kept(business, database):
     requested = filings[("tds_26q", "Q3 2026-27")]  # in an open request
     database.session.commit()
 
-    counts = sync_filings(business.id, profile(files_26q=False), TODAY, keep_ids={requested.id})
+    # Q3 is in an open (requested) engagement.
+    monkeypatch.setattr(compliance_service, "open_filing_ids", lambda filing_ids: {requested.id})
+    counts = sync_filings(business.id, profile(files_26q=False), TODAY)
     database.session.commit()
 
     assert (counts["removed"], counts["kept_with_ca"]) == (1, 2)
@@ -196,7 +199,7 @@ def test_filed_and_ca_filings_are_kept(business, database):
 
 
 def test_an_audit_moves_the_itr_due_date(business, database):
-    create_filings(business.id, profile(), TODAY)
+    sync_filings(business.id, profile(), TODAY)
     database.session.commit()
     before = by_key(database)[("itr", "FY 2026-27")].due_date
 

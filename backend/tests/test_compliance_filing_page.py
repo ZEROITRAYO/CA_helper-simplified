@@ -228,10 +228,10 @@ def test_the_filing_page_does_not_open_the_acknowledgement_file(
     item_id = filing_id(database)
     mark_filed(client, owner, item_id, file=(io.BytesIO(PDF), "ack.pdf", "application/pdf"))
 
-    def file_unreadable(document_id):
+    def file_unreadable(document):
         raise AssertionError("the page must not read the file")
 
-    monkeypatch.setattr(documents_service, "read_document", file_unreadable)
+    monkeypatch.setattr(documents_service, "send_document", file_unreadable)
     response = client.get(f"{ITEMS}/{item_id}", headers=owner)
 
     assert response.status_code == 200
@@ -291,17 +291,3 @@ def test_undo_needs_a_self_filed_filing(client, owner, database):
 
 
 # --- List filters (CO4) ----------------------------------------------------------------
-
-
-def test_list_filters(client, owner):
-    def labels(query):
-        items = client.get(ITEMS + query, headers=owner).get_json()
-        return sorted((item["form_code"], item["period_label"]) for item in items)
-
-    assert all(form == "gstr_1" for form, _ in labels("?form_code=gstr_1"))
-    assert labels("?status=overdue") == [("gstr_1", "Q1 2026-27"), ("gstr_3b", "Q1 2026-27")]
-    assert labels("?due_from=2026-10-01&due_to=2026-10-31") == [
-        ("gstr_1", "Q2 2026-27"),
-        ("gstr_3b", "Q2 2026-27"),
-    ]
-    assert client.get(ITEMS + "?status=nonsense", headers=owner).status_code == 422

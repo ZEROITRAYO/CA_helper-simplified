@@ -146,23 +146,19 @@ def test_upload_to_the_vault(client, owner, database, business_with_filings):
     assert (
         body["ocr_status"] == "failed"
     )  # the sample bytes are not a real PDF (OCR tests: test_ocr.py)
-    assert body["links"] == [] and body["acknowledgement_of"] == []
+    assert body["links"] == []
     document = database.session.get(Document, body["id"])
     assert document.owner_id == business_with_filings.user_id
     assert document.uploaded_by_id == business_with_filings.user_id
 
 
-def test_every_upload_calls_the_ocr_hook(client, owner, monkeypatch):
+def test_every_upload_is_read_by_ocr(client, owner, monkeypatch):
     seen = []
-    monkeypatch.setattr(
-        documents_service,
-        "on_document_uploaded",
-        lambda document, data: seen.append((document, data)),
-    )
+    monkeypatch.setattr(documents_service.ocr, "extract_text", lambda data, mime: seen.append(data) or "text")
 
     upload(client, owner)
 
-    assert len(seen) == 1 and seen[0][0].id is not None and seen[0][1] == PDF
+    assert seen == [PDF]
 
 
 @pytest.mark.parametrize(
@@ -232,9 +228,6 @@ def test_list_by_filing_has_its_documents_and_acknowledgement(client, owner, dat
     assert by_q2[0]["links"][0]["period_label"] == "Q2 2026-27"
     assert [row["original_filename"] for row in by_q1] == ["ack.pdf"]
     assert by_q1[0]["doc_type"] == "acknowledgement"
-    assert by_q1[0]["acknowledgement_of"] == [
-        {"compliance_item_id": str(q1.id), "form_code": "gstr_1", "period_label": "Q1 2026-27"}
-    ]
 
 
 def test_a_business_sees_only_its_own_documents(client, owner, database, make_user, auth_headers):

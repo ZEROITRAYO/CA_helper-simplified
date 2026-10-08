@@ -51,12 +51,10 @@ def test_small_proprietor():
     assert profile["roc_not_tracked"] is False
 
 
-def test_every_line_has_a_why():
+def test_only_the_two_notices_are_explained():
     profile = compute_profile(make_business(), TODAY)
 
-    for line in ("msme_tier", "gst_scheme", "presumptive_eligible", "audit_applicable", "itr_form"):
-        assert profile["explanations"][line]
-    assert "₹" in profile["explanations"]["msme_tier"]
+    assert profile["explanations"] == {"gst_scheme": "", "roc_not_tracked": ""}
 
 
 @pytest.mark.parametrize(
@@ -89,7 +87,6 @@ def test_composition_above_its_limit_falls_back_to_regular():
     profile = compute_profile(make_business(gst_composition=True, annual_turnover=2 * CRORE), TODAY)
 
     assert profile["gst_scheme"] == GstScheme.REGULAR_QRMP
-    assert "Composition is not allowed" in profile["explanations"]["gst_scheme"]
 
 
 def test_unregistered_business_above_the_limit_is_told_to_register():
@@ -132,11 +129,8 @@ def test_qrmp_is_the_users_choice_within_the_limit():
     too_big = compute_profile(make_business(gst_qrmp=True, annual_turnover=6 * CRORE), TODAY)
 
     assert monthly["gst_scheme"] == GstScheme.REGULAR_MONTHLY
-    assert "You chose monthly returns" in monthly["explanations"]["gst_scheme"]
     assert quarterly["gst_scheme"] == GstScheme.REGULAR_QRMP
-    assert "You chose quarterly returns (QRMP)" in quarterly["explanations"]["gst_scheme"]
     assert too_big["gst_scheme"] == GstScheme.REGULAR_MONTHLY
-    assert "not allowed" in too_big["explanations"]["gst_scheme"]
 
 
 @pytest.mark.parametrize("entity", [EntityType.PARTNERSHIP, EntityType.LLP])
@@ -146,7 +140,6 @@ def test_firms_and_llps_answer_the_other_audit_question(entity):
     )
 
     assert audited["other_audit_applicable"] is True
-    assert "You said your accounts are audited" in audited["explanations"]["other_audit_applicable"]
 
 
 def test_proprietors_ignore_the_other_audit_answer():
@@ -155,17 +148,18 @@ def test_proprietors_ignore_the_other_audit_answer():
     assert profile["other_audit_applicable"] is False
 
 
-def test_the_company_audit_is_explained_on_its_own_line():
+def test_a_company_is_always_audited_under_company_law():
     profile = compute_profile(make_business(entity_type=EntityType.PRIVATE_LIMITED), TODAY)
 
-    assert "company" not in profile["explanations"]["audit_applicable"].lower()
-    assert "always audited" in profile["explanations"]["other_audit_applicable"]
+    assert profile["audit_applicable"] is False  # not the tax audit (s.44AB)
+    assert profile["other_audit_applicable"] is True
+    assert "ROC/MCA" in profile["explanations"]["roc_not_tracked"]
 
 
 def test_amounts_use_the_indian_number_format():
-    profile = compute_profile(make_business(annual_turnover=45 * LAKH), TODAY)
+    profile = compute_profile(make_business(gst_registered=False, annual_turnover=45 * LAKH), TODAY)
 
-    assert "₹45,00,000" in profile["explanations"]["msme_tier"]
+    assert "₹20,00,000" in profile["explanations"]["gst_scheme"]  # the registration limit
 
 
 def test_tds_returns():

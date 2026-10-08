@@ -172,7 +172,7 @@ def test_my_clients_with_urgency_and_why(client, work):
 
 def test_urgency_counts_near_deadlines_and_open_requests(monkeypatch):
     # Filings with nothing missing, due in 3, 6 and 34 days.
-    monkeypatch.setattr(compliance_service, "checklist_progress", lambda filing: {"missing": []})
+    monkeypatch.setattr(compliance_service, "missing_documents", lambda filing: [])
 
     def due(day):
         return SimpleNamespace(due_date=day)
@@ -478,7 +478,7 @@ def test_ca_mark_filed_checks(client, work, database):
 
 def test_batches_group_by_form_and_due_date(client, work):
     document = upload(client, work["owner_headers"]).get_json()
-    for key in compliance_service.checklist_keys("gstr_1"):
+    for key in [entry["key"] for entry in compliance_service.checklist("gstr_1")]:
         client.post(
             f"/api/v1/documents/{document['id']}/links",
             json={"compliance_item_id": str(work["q2"].id), "checklist_key": key},

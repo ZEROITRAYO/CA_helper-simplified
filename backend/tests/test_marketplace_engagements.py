@@ -12,7 +12,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from flask_jwt_extended import verify_jwt_in_request
 
 from app import marketplace as marketplace_service
 from app.models import (
@@ -44,7 +43,6 @@ from app.models import (
     utcnow,
 )
 from app.seed import seed_service_catalog
-from app.utils import ApiError, require_ca_access
 
 BASE = "/api/v1/marketplace"
 _numbers = iter(range(100000, 999999))
@@ -726,25 +724,20 @@ def test_documents_only_of_filings_in_active_work(client, setup, database):
     assert marketplace_service.ca_can_open_document(ca.id, linked.id) is False
 
 
-def test_require_ca_access_for_ca_routes(app, client, setup, make_user, auth_headers):
+def test_a_ca_sees_a_client_only_while_active(client, setup, make_user, auth_headers):
     business = setup["business"]
     engagement = request_gst(client, setup)
     no_profile_ca = make_user(role=UserRole.CA)
+    url = f"/api/v1/ca-workspace/clients/{business.id}"
 
-    def check(headers):
-        with app.test_request_context(headers=headers):
-            verify_jwt_in_request()
-            require_ca_access(business.id)
-
-    # Only a request so far, and a CA without a profile: 404 BUSINESS_NOT_FOUND.
-    for headers in [setup["ca_headers"], auth_headers(no_profile_ca)]:
-        with pytest.raises(ApiError) as error:
-            check(headers)
-        assert error.value.status == 404
-        assert error.value.code == "BUSINESS_NOT_FOUND"
+    # Only a request so far: 404 BUSINESS_NOT_FOUND; a CA without a profile: 404 too.
+    only_requested = client.get(url, headers=setup["ca_headers"])
+    assert only_requested.status_code == 404
+    assert only_requested.get_json()["error"]["code"] == "BUSINESS_NOT_FOUND"
+    assert client.get(url, headers=auth_headers(no_profile_ca)).status_code == 404
 
     action(client, setup["ca_headers"], engagement["id"], "accept")
-    check(setup["ca_headers"])  # active: no error
+    assert client.get(url, headers=setup["ca_headers"]).status_code == 200  # active
 
 
 # --- MA17: ratings ----------------------------------------------------------------------

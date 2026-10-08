@@ -4,6 +4,23 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-08: A smaller, first-year-style backend
+
+**What** (no feature or page changed)
+- The backend went from 6,841 to 4,626 lines (295 to 224 functions). Helpers called from one place were folded
+  into their caller; the admin-only queries moved into `admin.py`; dead code went.
+- Request fields are read with a few shared readers in `utils.py` (`read_text`, `read_bool`, `read_int`,
+  `read_choice`, `read_id`, `read_amount`, `read_upload`, `page_of`). They stop at the first bad field: the
+  422 VALIDATION_ERROR says what is wrong in `message` and names that one field in `details`.
+- The email texts are files in `backend/app/templates/email/`.
+- Models have a few relationships (`Engagement.ca`, `.business`, `EngagementItem.filing`, `.service`,
+  `DocumentRequest.engagement`, `.filing`); the tables are unchanged.
+- Unused API details went: the `/compliance/items` filters, `acknowledgement_of` on documents, and the
+  profile's "why" texts other than the two notices the page shows.
+
+**Why:** the code read like an industry codebase; it is a lab project a first-year student should be able to follow.
+
+
 ## 2026-10-08: No news monitor, no Gemini, and CA requests never expire
 
 **What**

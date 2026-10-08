@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from app import marketplace as marketplace_service, onboarding as onboarding_service
+from app import compliance as compliance_service, onboarding as onboarding_service
 from app.models import Business, ComplianceItem, UserRole
 from app.utils import gstin_check_character
 from tests.test_onboarding_register import FORM, URL, register
@@ -137,7 +137,7 @@ def test_switching_back_to_quarterly_removes_the_extra_months(client, headers, d
 def test_editing_keeps_filings_in_an_open_engagement(client, headers, database, monkeypatch):
     register(client, headers, gst_qrmp=False)
     may = database.session.query(ComplianceItem).filter_by(period_label="May 2026").first()
-    monkeypatch.setattr(marketplace_service, "open_filing_ids", lambda ids: {may.id})
+    monkeypatch.setattr(compliance_service, "open_filing_ids", lambda ids: {may.id})
 
     response = client.put(URL, json=FORM, headers=headers)  # back to quarterly: no May
 

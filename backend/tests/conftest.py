@@ -30,7 +30,7 @@ from sqlalchemy.exc import OperationalError
 
 from app import create_app
 from app.auth import issue_access_token
-from app.compliance import create_filings
+from app.compliance import sync_filings
 from app.models import (
     Business,
     db as _db,
@@ -202,6 +202,6 @@ def business_with_filings(make_user, legal_rules, database):
     profile = RegulatoryProfile(
         gst_scheme=GstScheme.REGULAR_QRMP, audit_applicable=False, files_24q=False, files_26q=False
     )
-    create_filings(business.id, profile, date(2026, 9, 27))
+    sync_filings(business.id, profile, date(2026, 9, 27))
     database.session.commit()
     return business
