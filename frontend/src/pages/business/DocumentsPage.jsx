@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "react-router";
 
 import {
   deleteDocument,
@@ -10,7 +9,6 @@ import {
   UPLOAD_TYPES,
   uploadDocument,
   useDocuments,
-  useFilings,
 } from "@/api";
 import { Pager, QueryStatus } from "@/components/shared";
 import {
@@ -23,46 +21,17 @@ import {
   Input,
   Label,
 } from "@/components/ui";
-import { DOCUMENT_TYPE_LABELS, filingFormLabel, formatDateTime, label, todayIso } from "@/lib";
+import { DOCUMENT_TYPE_LABELS, formatDateTime, label } from "@/lib";
 
 const SELECT_CLASS =
   "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const PAGE_SIZE = 20;
 
-// This financial year and the three before it, e.g. ["2026-27", "2025-26", ...].
-// A financial year runs from April to March.
-function recentFinancialYears() {
-  const [year, month] = todayIso().split("-").map(Number);
-  const start = month >= 4 ? year : year - 1;
-  const years = [];
-  for (let first = start; first > start - 4; first--) {
-    years.push(`${first}-${String((first + 1) % 100).padStart(2, "0")}`);
-  }
-  return years;
-}
-
-// "240 KB", "1.5 MB".
-function formatSize(bytes) {
-  if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
-
-// "GSTR-1 · Q2 2026-27"
-function filingName(filing) {
-  return `${filingFormLabel(filing.form_code, filing.period_label)} · ${filing.period_label}`;
-}
-
-/** /business/documents: the vault; upload, filter, open and delete files. */
+/** /business/documents: the vault; upload, open and delete files. */
 export function DocumentsPage() {
-  const [filters, setFilters] = useState({ fy: "", doc_type: "", compliance_item_id: "" });
   const [page, setPage] = useState(1);
-  const documents = useDocuments({ ...filters, page, page_size: PAGE_SIZE });
-
-  function changeFilter(name, value) {
-    setFilters({ ...filters, [name]: value });
-    setPage(1);
-  }
+  const documents = useDocuments({ page, page_size: PAGE_SIZE });
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -82,7 +51,6 @@ export function DocumentsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Filters filters={filters} onChange={changeFilter} />
           <QueryStatus query={documents} />
           {documents.isSuccess && (
             <DocumentTable result={documents.data} page={page} onPage={setPage} />
@@ -97,6 +65,7 @@ function UploadCard() {
   const queryClient = useQueryClient();
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
+  const [warning, setWarning] = useState(null);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(event) {
@@ -106,18 +75,22 @@ function UploadCard() {
     const file = formElement.elements.file.files[0];
     setError(null);
     setDone(null);
+    setWarning(null);
     if (!file) {
       setError("Choose a file to upload.");
       return;
     }
     setBusy(true);
     try {
-      const document = await uploadDocument(file, {
-        doc_type: form.get("doc_type"),
-        fy: form.get("fy"),
-        period_label: form.get("period_label").trim(),
-      });
+      const document = await uploadDocument(file, { doc_type: form.get("doc_type") });
       setDone(`Uploaded ${document.original_filename}.`);
+      // The file was read (OCR) and seems to be another type than the one chosen.
+      if (document.type_warning) {
+        setWarning(
+          `Check the type: this file seems to be "${label(DOCUMENT_TYPE_LABELS, document.type_warning)}", ` +
+            `but you chose "${label(DOCUMENT_TYPE_LABELS, document.doc_type)}".`,
+        );
+      }
       formElement.reset();
       queryClient.invalidateQueries({ queryKey: DOCUMENTS_KEY });
     } catch (failure) {
@@ -134,7 +107,7 @@ function UploadCard() {
         <CardDescription>PDF, JPG or PNG.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="grid gap-3 sm:grid-cols-2 sm:items-end lg:grid-cols-4" onSubmit={onSubmit}>
+        <form className="grid gap-3 sm:grid-cols-2 sm:items-end" onSubmit={onSubmit}>
           <div className="space-y-2">
             <Label htmlFor="upload_file">File</Label>
             <Input id="upload_file" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png" />
@@ -149,27 +122,7 @@ function UploadCard() {
               ))}
             </select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="upload_fy">Financial year</Label>
-            <select id="upload_fy" name="fy" defaultValue="" className={SELECT_CLASS}>
-              <option value="">Not set</option>
-              {recentFinancialYears().map((fy) => (
-                <option key={fy} value={fy}>
-                  {fy}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="upload_period">Period (optional)</Label>
-            <Input
-              id="upload_period"
-              name="period_label"
-              placeholder="e.g. Apr 2026"
-              maxLength={30}
-            />
-          </div>
-          <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-4">
+          <div className="flex items-center gap-3 sm:col-span-2">
             <Button type="submit" disabled={busy}>
               {busy ? "Uploading..." : "Upload"}
             </Button>
@@ -180,72 +133,18 @@ function UploadCard() {
               </p>
             )}
           </div>
+          {warning && (
+            <p role="note" className="rounded-lg bg-amber-100 p-3 text-sm text-amber-900 sm:col-span-2">
+              {warning}
+            </p>
+          )}
         </form>
       </CardContent>
     </Card>
   );
 }
 
-function Filters({ filters, onChange }) {
-  const filings = useFilings();
-
-  return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <div className="space-y-2">
-        <Label htmlFor="filter_fy">Financial year</Label>
-        <select
-          id="filter_fy"
-          value={filters.fy}
-          onChange={(event) => onChange("fy", event.target.value)}
-          className={SELECT_CLASS}
-        >
-          <option value="">Any</option>
-          {recentFinancialYears().map((fy) => (
-            <option key={fy} value={fy}>
-              {fy}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="filter_type">Type</Label>
-        <select
-          id="filter_type"
-          value={filters.doc_type}
-          onChange={(event) => onChange("doc_type", event.target.value)}
-          className={SELECT_CLASS}
-        >
-          <option value="">Any</option>
-          {Object.entries(DOCUMENT_TYPE_LABELS).map(([code, text]) => (
-            <option key={code} value={code}>
-              {text}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="filter_filing">Filing</Label>
-        <select
-          id="filter_filing"
-          value={filters.compliance_item_id}
-          onChange={(event) => onChange("compliance_item_id", event.target.value)}
-          className={SELECT_CLASS}
-        >
-          <option value="">Any</option>
-          {filings.isSuccess &&
-            (filings.data ?? []).map((filing) => (
-              <option key={filing.id} value={filing.id}>
-                {filingName(filing)}
-              </option>
-            ))}
-        </select>
-      </div>
-    </div>
-  );
-}
-
 function DocumentTable({ result, page, onPage }) {
-
   if (result.items.length === 0) {
     return <p className="text-sm text-muted-foreground">No documents here yet.</p>;
   }
@@ -258,9 +157,7 @@ function DocumentTable({ result, page, onPage }) {
               <th className="py-2 pr-4 font-medium">File</th>
               <th className="py-2 pr-4 font-medium">Type</th>
               <th className="py-2 pr-4 font-medium">Year / period</th>
-              <th className="py-2 pr-4 font-medium">Size</th>
               <th className="py-2 pr-4 font-medium">Uploaded</th>
-              <th className="py-2 pr-4 font-medium">Used for</th>
               <th className="py-2 font-medium">
                 <span className="sr-only">Actions</span>
               </th>
@@ -311,35 +208,14 @@ function DocumentRow({ document }) {
         {/* The file was read (OCR) and looks like another type. */}
         {document.type_warning && (
           <span className="block text-xs text-amber-700">
-            Looks like: {label(DOCUMENT_TYPE_LABELS, document.type_warning)}
+            Seems to be: {label(DOCUMENT_TYPE_LABELS, document.type_warning)}
           </span>
         )}
       </td>
       <td className="py-2 pr-4">
         {[document.fy, document.period_label].filter(Boolean).join(" · ") || "—"}
       </td>
-      <td className="py-2 pr-4 whitespace-nowrap">{formatSize(document.size_bytes)}</td>
       <td className="py-2 pr-4">{formatDateTime(document.created_at)}</td>
-      <td className="py-2 pr-4">
-        <ul className="space-y-1">
-          {document.acknowledgement_of.map((filing) => (
-            <li key={filing.compliance_item_id}>
-              Acknowledgement of{" "}
-              <Link to={"/business/compliance/" + filing.compliance_item_id} className="underline">
-                {filingName(filing)}
-              </Link>
-            </li>
-          ))}
-          {document.links.map((link) => (
-            <li key={link.id}>
-              <Link to={"/business/compliance/" + link.compliance_item_id} className="underline">
-                {filingName(link)}
-              </Link>
-            </li>
-          ))}
-        </ul>
-        {document.links.length + document.acknowledgement_of.length === 0 && "—"}
-      </td>
       <td className="py-2">
         <div className="flex gap-2">
           <Button

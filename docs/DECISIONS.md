@@ -4,6 +4,24 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-08: A simpler vault, purple OCR fields, emails that say who wrote to whom
+
+**What**
+- **Document vault:** an upload asks only for the file and its type (no financial year or period). The list has
+  no filters and no "Size" or "Used for" columns. `GET /documents` keeps only the `compliance_item_id` filter
+  (the filing page uses it); `POST /documents` no longer reads `fy` or `period_label` (a file uploaded from a
+  filing still gets the filing's year and period). The `documents.fy` / `period_label` columns stay.
+- **Type check also for "Other":** if OCR thinks a file is, say, a PAN card while the chosen type is "Other" (or
+  any other type), the upload shows "Check the type: this file seems to be ..." and the row "Seems to be: ...".
+- **Business registration:** the fields filled by "Fill in from your GST certificate or PAN card" are purple, with
+  a note above the form to check them before registering, as scanning can be wrong.
+- **Document request and answer emails** (and their notifications) now start with "From: ... To: ...". The answer
+  to a CA shows the CA's request as "Your request:" and the file sent, so it no longer reads as if the business
+  had written the CA's words.
+
+**Why:** fewer fields to fill in, and the emails were easy to read the wrong way round.
+
+
 ## 2026-10-07: No typical fees, an inbox instead of the bell, logins that never expire
 
 **What**

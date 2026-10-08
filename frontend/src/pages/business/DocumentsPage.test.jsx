@@ -1,17 +1,12 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeApi, loginAs, renderApp } from "@/test/utils";
 
 const LIST = "/api/v1/documents?page=1&page_size=20";
 
-// "Today" is 28 Sep 2026 (financial year 2026-27).
-beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 8, 28) }));
-afterEach(() => {
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-});
+afterEach(() => vi.restoreAllMocks());
 
 function documents(items, total = items.length) {
   return { items, page: 1, page_size: 20, total };
@@ -56,7 +51,6 @@ function open(answers = {}) {
   loginAs("business");
   const fetchMock = fakeApi({
     [`GET ${LIST}`]: [200, documents([SALES, ACK])],
-    "GET /api/v1/compliance/items": [200, []],
     ...answers,
   });
   renderApp("/business/documents");
@@ -70,51 +64,23 @@ function requested(fetchMock, path, method = "GET") {
 }
 
 describe("document vault", () => {
-  it("lists the documents with what they are used for", async () => {
+  it("lists the documents without filters, size or 'used for'", async () => {
     open();
 
     const row = (await screen.findByText("sales-apr.pdf")).closest("tr");
     expect(row).toHaveTextContent("Sales register");
     expect(row).toHaveTextContent("2026-27 · Apr 2026");
-    expect(row).toHaveTextContent("240 KB");
-    expect(within(row).getByRole("link", { name: "GSTR-1 · Q1 2026-27" })).toHaveAttribute(
-      "href",
-      "/business/compliance/f1",
-    );
-    const ack = screen.getByText("ack.pdf").closest("tr");
-    expect(ack).toHaveTextContent("3.3 MB");
-    expect(ack).toHaveTextContent("Acknowledgement of GSTR-3B · Q1 2026-27");
+    expect(row).not.toHaveTextContent("240 KB");
+    expect(within(row).queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Size" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Used for" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Financial year")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Filing")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("combobox")).toHaveLength(1); // only the upload's Type
     expect(screen.getByText("2 documents")).toBeInTheDocument();
   });
 
-  it("filters by financial year and type", async () => {
-    const fetchMock = open({
-      "GET /api/v1/documents?fy=2026-27&page=1&page_size=20": [200, documents([SALES])],
-      "GET /api/v1/documents?fy=2026-27&doc_type=acknowledgement&page=1&page_size=20": [
-        200,
-        documents([ACK]),
-      ],
-    });
-    const user = userEvent.setup();
-    await screen.findByText("sales-apr.pdf");
-
-    await user.selectOptions(
-      screen.getByLabelText("Financial year", { selector: "#filter_fy" }),
-      "2026-27",
-    );
-    await waitFor(() =>
-      expect(requested(fetchMock, "/api/v1/documents?fy=2026-27&page=1&page_size=20")).toBe(true),
-    );
-    await user.selectOptions(
-      screen.getByLabelText("Type", { selector: "#filter_type" }),
-      "acknowledgement",
-    );
-
-    await waitFor(() => expect(screen.queryByText("sales-apr.pdf")).not.toBeInTheDocument());
-    expect(screen.getByText("ack.pdf")).toBeInTheDocument();
-  });
-
-  it("uploads a file with its type and year", async () => {
+  it("uploads a file with its type only", async () => {
     const fetchMock = open({ "POST /api/v1/documents": [201, SALES] });
     const user = userEvent.setup();
     await screen.findByText("sales-apr.pdf");
@@ -127,11 +93,6 @@ describe("document vault", () => {
       screen.getByLabelText("Type", { selector: "#upload_type" }),
       "sales_register",
     );
-    await user.selectOptions(
-      screen.getByLabelText("Financial year", { selector: "#upload_fy" }),
-      "2026-27",
-    );
-    await user.type(screen.getByLabelText("Period (optional)"), "Apr 2026");
     await user.click(screen.getByRole("button", { name: "Upload" }));
 
     expect(await screen.findByText("Uploaded sales-apr.pdf.")).toBeInTheDocument();
@@ -140,8 +101,8 @@ describe("document vault", () => {
     );
     const sent = call[1].body;
     expect(sent.get("doc_type")).toBe("sales_register");
-    expect(sent.get("fy")).toBe("2026-27");
-    expect(sent.get("period_label")).toBe("Apr 2026");
+    expect(sent.get("fy")).toBeNull();
+    expect(sent.get("period_label")).toBeNull();
     expect(sent.get("compliance_item_id")).toBeNull();
   });
 
@@ -218,6 +179,27 @@ describe("document type check", () => {
   it("warns when a file looks like another type", async () => {
     open({ [`GET ${LIST}`]: [200, documents([{ ...SALES, type_warning: "bank_statement" }])] });
 
-    expect(await screen.findByText("Looks like: Bank statement")).toBeInTheDocument();
+    expect(await screen.findByText("Seems to be: Bank statement")).toBeInTheDocument();
+  });
+
+  it("warns right after uploading a PAN card as Other", async () => {
+    open({
+      "POST /api/v1/documents": [
+        201,
+        { ...SALES, doc_type: "other", original_filename: "scan.pdf", type_warning: "pan_card" },
+      ],
+    });
+    const user = userEvent.setup();
+    await screen.findByText("sales-apr.pdf");
+
+    await user.upload(
+      screen.getByLabelText("File"),
+      new File(["%PDF-1.4"], "scan.pdf", { type: "application/pdf" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Upload" }));
+
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      'Check the type: this file seems to be "PAN card", but you chose "Other".',
+    );
   });
 });

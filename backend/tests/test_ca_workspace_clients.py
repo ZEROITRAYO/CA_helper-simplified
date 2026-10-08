@@ -315,6 +315,11 @@ def test_ca_asks_for_a_document_and_the_business_sees_a_to_do(client, work, data
     assert note.type == "document_request"
     assert note.link == f"/business/compliance/{work['q2'].id}"
     assert [message["To"] for message in mailbox] == [work["owner"].email]
+    # The email says it is from the CA to the business, not the other way round.
+    text = mailbox[0].get_content()
+    assert mailbox[0]["Subject"].startswith("Meera Shah asked you for a document")
+    assert f"From: Meera Shah (your CA)\nTo: {work['business'].legal_name}" in text
+    assert "Message: Please upload the sales invoices" in text
     to_dos = client.get(f"{BASE}/document-requests", headers=work["owner_headers"]).get_json()
     assert to_dos[0]["message"] == "Please upload the sales invoices"
     assert to_dos[0]["ca_name"] == "Meera Shah"
@@ -368,6 +373,12 @@ def test_business_fulfils_a_request_with_a_file(client, work, database, mailbox)
     link = database.session.query(ComplianceItemDocument).one()
     assert (link.compliance_item_id, link.checklist_key) == (work["q2"].id, "sales_invoices")
     assert [message["To"] for message in mailbox] == [work["ca_user"].email]
+    # The answer is from the business to the CA, and names the file it sent.
+    text = mailbox[0].get_content()
+    assert mailbox[0]["Subject"] == f"{work['business'].legal_name} sent you the document you asked for"
+    assert f"From: {work['business'].legal_name} (your client)\nTo: Meera Shah" in text
+    assert "Your request: Please upload the sales invoices" in text
+    assert f"Document sent: {document['original_filename']}" in text
     ca_note = database.session.query(Notification).filter_by(user_id=work["ca_user"].id).one()
     assert ca_note.link == f"/ca/clients/{work['business'].id}"
     # The CA can now open the file (it serves a filing of the active engagement).

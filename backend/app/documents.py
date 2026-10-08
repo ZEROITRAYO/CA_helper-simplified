@@ -10,7 +10,6 @@ links are fixed: they are the proof of what was filed. Admins never open documen
 import hashlib
 import io
 import logging
-import re
 from datetime import date
 
 from flask import Blueprint, jsonify, request, send_file
@@ -50,14 +49,6 @@ bp = Blueprint("documents", __name__)
 GENERAL_KEY = "general"
 # How documents_by_filing() marks a filing's acknowledgement.
 ACKNOWLEDGEMENT_KEY = "acknowledgement"
-# A financial year is written "2026-27": April 2026 to March 2027.
-FY_PATTERN = re.compile(r"^(\d{4})-(\d{2})$")
-FY_MESSAGE = 'Write the financial year like "2026-27".'
-
-
-def is_financial_year(text):
-    match = FY_PATTERN.match(text)
-    return match is not None and (int(match.group(1)) + 1) % 100 == int(match.group(2))
 
 
 def add_document(owner_id, uploaded_by_id, upload, doc_type):
@@ -98,9 +89,9 @@ def on_document_uploaded(document, data):
 
 
 def type_warning(document):
-    """The type the file looks like when it differs from its upload type, else None."""
+    """The type the file seems to be when that is not the type chosen at upload, else None."""
     guess = (document.ocr_fields or {}).get("type_guess")
-    if guess is None or guess == document.doc_type or document.doc_type == DocumentType.OTHER:
+    if guess is None or guess == document.doc_type:
         return None
     return DocumentType(guess)
 
@@ -390,14 +381,6 @@ def upload_document():
         errors["doc_type"] = [f"Must be one of: {', '.join(DocumentType)}."]
     elif doc_type == DocumentType.CERTIFICATE_OF_PRACTICE:
         errors["doc_type"] = ["This type cannot be uploaded here."]
-    fy = form.get("fy")
-    if fy is not None and not is_financial_year(fy):
-        errors["fy"] = [FY_MESSAGE]
-    period_label = form.get("period_label")
-    if period_label is not None:
-        if len(period_label) > 30:
-            errors["period_label"] = ["Longer than maximum length 30."]
-        period_label = period_label.strip() or None
     item_id = form.get("compliance_item_id")
     if item_id is not None:
         item_id = read_uuid(item_id)
@@ -421,11 +404,9 @@ def upload_document():
         _check_key(filing, checklist_key)
 
     document = add_document(business.user_id, user.id, upload, doc_type)
-    document.fy = fy
-    document.period_label = period_label
     if filing is not None:
-        document.fy = fy or filing.fy
-        document.period_label = period_label or filing.period_label
+        document.fy = filing.fy
+        document.period_label = filing.period_label
         _link(filing, document, checklist_key, user)
     db.session.commit()
     return jsonify(documents_to_dicts([document])[0]), 201
@@ -434,15 +415,9 @@ def upload_document():
 @bp.get("/documents")
 @roles_required(UserRole.BUSINESS)
 def list_documents():
-    """The business's documents, newest first, paginated; optional filters."""
+    """The business's documents, newest first, paginated; optionally only one filing's."""
     errors = {}
     page, page_size = read_page_args(errors)
-    fy = request.args.get("fy")
-    if fy is not None and not is_financial_year(fy):
-        errors["fy"] = [FY_MESSAGE]
-    doc_type = request.args.get("doc_type")
-    if doc_type is not None and doc_type not in list(DocumentType):
-        errors["doc_type"] = [f"Must be one of: {', '.join(DocumentType)}."]
     item_id = request.args.get("compliance_item_id")
     if item_id is not None:
         item_id = read_uuid(item_id)
@@ -453,10 +428,6 @@ def list_documents():
 
     business = current_business()
     stmt = select(Document).where(Document.owner_id == business.user_id)
-    if fy is not None:
-        stmt = stmt.where(Document.fy == fy)
-    if doc_type is not None:
-        stmt = stmt.where(Document.doc_type == doc_type)
     if item_id is not None:
         linked = select(ComplianceItemDocument.document_id).where(
             ComplianceItemDocument.compliance_item_id == item_id

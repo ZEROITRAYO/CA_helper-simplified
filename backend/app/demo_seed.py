@@ -538,15 +538,19 @@ def seed_demo_data():
     alerts.notify(
         asha_owner,
         NotificationType.DOCUMENT_REQUEST,
-        f"Your CA asked for a document for GSTR-3B ({gstr_3b.period_label})",
-        "Please download GSTR-2B for the period from the GST portal and upload it.",
+        f"{demo_ca_user.full_name} asked you for a document for GSTR-3B ({gstr_3b.period_label})",
+        f"From: {demo_ca_user.full_name} (your CA)\nTo: {asha.legal_name}\n\n"
+        "Message: Please download GSTR-2B for the period from the GST portal and upload it.\n\n"
+        "Upload the document from the filing's page.",
         f"/business/compliance/{gstr_3b.id}",
     )
     alerts.notify(
         demo_ca_user,
         NotificationType.DOCUMENT_REQUEST,
-        f"{asha.legal_name} sent the document you asked for",
-        f"For GSTR-1 ({gstr_1.period_label}): HSN summary.",
+        f"{asha.legal_name} sent you the document you asked for",
+        f"From: {asha.legal_name} (your client)\nTo: {demo_ca_user.full_name}\n\n"
+        f"Filing: GSTR-1 ({gstr_1.period_label})\n"
+        "Your request: HSN summary.",
         f"/ca/clients/{asha.id}",
     )
     _pending_ca(password_hash)

@@ -135,15 +135,14 @@ def engage(database, business, profile, item, status=EngagementStatus.ACTIVE) ->
 
 
 def test_upload_to_the_vault(client, owner, database, business_with_filings):
-    response = upload(client, owner, fy="2026-27", period_label=" Apr 2026 ")
+    response = upload(client, owner)
 
     assert response.status_code == 201
     body = response.get_json()
     assert body["doc_type"] == "sales_register"
     assert body["original_filename"] == "sales.pdf"
     assert body["size_bytes"] == len(PDF)
-    assert body["fy"] == "2026-27"
-    assert body["period_label"] == "Apr 2026"
+    assert body["fy"] is None and body["period_label"] is None
     assert (
         body["ocr_status"] == "failed"
     )  # the sample bytes are not a real PDF (OCR tests: test_ocr.py)
@@ -171,8 +170,6 @@ def test_every_upload_calls_the_ocr_hook(client, owner, monkeypatch):
     [
         ({"doc_type": "certificate_of_practice"}, "doc_type"),
         ({"doc_type": "passport"}, "doc_type"),
-        ({"fy": "2026-28"}, "fy"),
-        ({"fy": "26-27"}, "fy"),
     ],
 )
 def test_upload_checks_its_fields(client, owner, database, fields, field):
@@ -198,10 +195,10 @@ def test_the_vault_needs_a_registered_business(client, make_user, auth_headers):
     assert upload(client, headers).status_code == 404
 
 
-def test_list_is_newest_first_filtered_and_paginated(client, owner, database):
-    upload(client, owner, name="a.pdf", fy="2025-26")
-    upload(client, owner, name="b.pdf", fy="2026-27", doc_type="bank_statement")
-    upload(client, owner, name="c.pdf", fy="2026-27")
+def test_list_is_newest_first_and_paginated(client, owner, database):
+    upload(client, owner, name="a.pdf")
+    upload(client, owner, name="b.pdf", doc_type="bank_statement")
+    upload(client, owner, name="c.pdf")
 
     everything = client.get(DOCS, headers=owner).get_json()
     assert [row["original_filename"] for row in everything["items"]] == ["c.pdf", "b.pdf", "a.pdf"]
@@ -211,11 +208,7 @@ def test_list_is_newest_first_filtered_and_paginated(client, owner, database):
         body = client.get(DOCS + "?" + query, headers=owner).get_json()
         return [row["original_filename"] for row in body["items"]]
 
-    assert names("fy=2026-27") == ["c.pdf", "b.pdf"]
-    assert names("doc_type=bank_statement") == ["b.pdf"]
-    assert names("fy=2026-27&doc_type=sales_register") == ["c.pdf"]
     assert names("page=2&page_size=2") == ["a.pdf"]
-    assert client.get(DOCS + "?fy=2026", headers=owner).status_code == 422
 
 
 def test_list_by_filing_has_its_documents_and_acknowledgement(client, owner, database):

@@ -231,8 +231,8 @@ CA Helper
 
 {{ body }}
 
-You can see it in the notification tray (the bell) in CA Helper.
-To change which emails you get, open "Notification settings".
+You can also read it in CA Helper under "Notification settings",
+where you can choose which emails you get.
 
 CA Helper
 """,
@@ -252,7 +252,7 @@ CA Helper
   - {{ line }}
 {%- endfor %}
 
-Open CA Helper to see each filing (the bell lists them too).
+Open CA Helper to see each filing (your inbox under "Notification settings" lists them too).
 To change which emails you get, open "Notification settings".
 
 CA Helper

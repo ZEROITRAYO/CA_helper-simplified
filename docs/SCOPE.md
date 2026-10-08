@@ -48,7 +48,7 @@ Tax audit applicability is computed in the profile (it changes the ITR due date)
 
    Status lifecycle: `Upcoming → Docs pending → Ready → With CA → Filed → Filed–verified`; `Overdue` is reachable
    from any pre-filed state.
-6. **Document vault:** by financial year, period and type; OCR document-type verification.
+6. **Document vault:** upload with a type; OCR checks the type (also "Other") and warns when the file seems to be another one.
 7. **CA marketplace:** match results with reasons; standard service catalog with each CA's listed (fixed) prices;
    requests at those prices; ratings.
 8. **Working with a CA:** CA document requests appear as to-dos; the client sees filing status and the verified acknowledgement.

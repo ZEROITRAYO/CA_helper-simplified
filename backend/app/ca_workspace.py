@@ -283,8 +283,12 @@ def create_document_request(business_id):
     )
     db.session.add(document_request)
     owner = db.session.get(User, business.user_id)
-    title = f"Your CA asked for a document for {compliance.filing_name(filing)}"
-    body = f"{user.full_name}: {message}"
+    # Say who wrote to whom, so the email cannot be read the wrong way round.
+    title = f"{user.full_name} asked you for a document for {compliance.filing_name(filing)}"
+    body = (
+        f"From: {user.full_name} (your CA)\nTo: {business.legal_name}\n\n"
+        f"Message: {message}\n\nUpload the document from the filing's page."
+    )
     alerts.notify(
         owner, NotificationType.DOCUMENT_REQUEST, title, body, f"/business/compliance/{filing.id}"
     )
@@ -433,8 +437,14 @@ def fulfil_document_request(request_id):
         document_request.compliance_item_id
     ]
     ca_user = cas[document_request.engagement_id]
-    title = f"{business.legal_name} sent the document you asked for"
-    body = f"For {compliance.filing_name(filing)}: {document_request.message}"
+    document = documents.get_document(document_id)
+    title = f"{business.legal_name} sent you the document you asked for"
+    body = (
+        f"From: {business.legal_name} (your client)\nTo: {ca_user.full_name}\n\n"
+        f"Filing: {compliance.filing_name(filing)}\n"
+        f"Your request: {document_request.message}\n"
+        f"Document sent: {document.original_filename}"
+    )
     alerts.notify(
         ca_user, NotificationType.DOCUMENT_REQUEST, title, body, f"/ca/clients/{business.id}"
     )

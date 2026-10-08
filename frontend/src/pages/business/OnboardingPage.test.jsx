@@ -262,6 +262,12 @@ describe("fill in from a document", () => {
     expect(screen.getByLabelText("State")).toHaveValue("Maharashtra");
     expect(screen.getByLabelText("GST registered")).toBeChecked();
     expect(screen.getByLabelText("GSTIN")).toHaveValue("27ABCDE1234F1Z5");
+    // The fields read from the file are purple, with a note to check them.
+    expect(screen.getByRole("note")).toHaveTextContent("scanning can be wrong");
+    for (const name of ["Business name", "Type of business", "State", "PAN", "GSTIN"]) {
+      expect(screen.getByLabelText(name)).toHaveClass("border-purple-500");
+    }
+    expect(screen.getByLabelText("Mobile number")).not.toHaveClass("border-purple-500");
     const call = fetchMock.mock.calls.find(([path]) => path === "/api/v1/onboarding/autofill");
     expect(call[1].body.get("file").name).toBe("certificate.pdf");
   });

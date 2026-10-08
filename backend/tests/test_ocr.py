@@ -224,6 +224,19 @@ def test_a_file_that_looks_like_another_type_is_flagged(client, owner):
     assert body["type_warning"] == "bank_statement"
 
 
+def test_a_pan_card_uploaded_as_other_is_flagged(client, owner):
+    pan = pdf_of("INCOME TAX DEPARTMENT\nGOVT. OF INDIA\nPermanent Account Number Card")
+
+    body = client.post(
+        "/api/v1/documents",
+        data={"doc_type": "other", "file": (io.BytesIO(pan), "scan.pdf", "application/pdf")},
+        headers=owner,
+        content_type="multipart/form-data",
+    ).get_json()
+
+    assert body["type_warning"] == "pan_card"
+
+
 # --- DO8 / CO10: an acknowledgement makes the filing "Filed–verified" ------------------
 
 

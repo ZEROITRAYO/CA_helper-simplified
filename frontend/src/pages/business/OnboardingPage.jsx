@@ -31,6 +31,7 @@ import {
   Label,
 } from "@/components/ui";
 import {
+  cn,
   ENTITY_TYPE_LABELS,
   formatRupees,
   GST_SCHEME_LABELS,
@@ -205,10 +206,14 @@ function formValues(business) {
 const SELECT_CLASS =
   "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
+// A field filled by "Fill in from a document" is purple until the form is saved.
+const OCR_CLASS = "border-purple-500 bg-purple-50 text-purple-900";
+
 /** Registers a business (no `business`) or edits the saved one. */
 function BusinessForm({ states, business, onSaved, onCancel }) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState(null);
+  const [ocrFields, setOcrFields] = useState([]); // the fields read from a document
   const schema = makeSchema(states);
   const {
     register,
@@ -228,6 +233,11 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
   const entityType = useWatch({ control, name: "entity_type" });
   const needsCin = entityType === "llp" || entityType === "private_limited";
   const asksOtherAudit = entityType === "partnership" || entityType === "llp";
+
+  // Extra classes for a field: purple when it was read from a document.
+  function ocr(field) {
+    return ocrFields.includes(field) ? OCR_CLASS : "";
+  }
 
   async function onSubmit(values) {
     setServerError(null);
@@ -268,18 +278,29 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {!business && <FillFromDocument setValue={setValue} />}
+        {!business && <FillFromDocument setValue={setValue} onFilled={setOcrFields} />}
+        {ocrFields.length > 0 && (
+          <p role="note" className="mb-4 rounded-lg bg-purple-100 p-3 text-sm text-purple-900">
+            The fields in purple were read from your document. Check them before you register, as
+            scanning can be wrong.
+          </p>
+        )}
         <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               id="legal_name"
               label="Business name"
+              className={ocr("legal_name")}
               error={errors.legal_name}
               {...register("legal_name")}
             />
             <div className="space-y-2">
               <Label htmlFor="entity_type">Type of business</Label>
-              <select id="entity_type" className={SELECT_CLASS} {...register("entity_type")}>
+              <select
+                id="entity_type"
+                className={cn(SELECT_CLASS, ocr("entity_type"))}
+                {...register("entity_type")}
+              >
                 <option value="">Choose...</option>
                 {Object.entries(ENTITY_TYPE_LABELS).map(([code, text]) => (
                   <option key={code} value={code}>
@@ -293,7 +314,11 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="state">State</Label>
-              <select id="state" className={SELECT_CLASS} {...register("state")}>
+              <select
+                id="state"
+                className={cn(SELECT_CLASS, ocr("state"))}
+                {...register("state")}
+              >
                 <option value="">Choose...</option>
                 {states.map((state) => (
                   <option key={state.code} value={state.name}>
@@ -329,7 +354,13 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
               error={errors.investment_amount}
               {...register("investment_amount")}
             />
-            <FormField id="pan" label="PAN" error={errors.pan} {...register("pan")} />
+            <FormField
+              id="pan"
+              label="PAN"
+              className={ocr("pan")}
+              error={errors.pan}
+              {...register("pan")}
+            />
             <FormField
               id="udyam_number"
               label="Udyam number (optional)"
@@ -375,7 +406,13 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
             <Checkbox id="gst_registered" text="GST registered" {...register("gst_registered")} />
             {gstRegistered && (
               <>
-                <FormField id="gstin" label="GSTIN" error={errors.gstin} {...register("gstin")} />
+                <FormField
+                  id="gstin"
+                  label="GSTIN"
+                  className={ocr("gstin")}
+                  error={errors.gstin}
+                  {...register("gstin")}
+                />
                 <Checkbox
                   id="gst_composition"
                   text="I chose the composition scheme"
@@ -454,7 +491,7 @@ const FILLABLE = {
 };
 
 /** Fill the form from a GST certificate or PAN card (read on the server, not stored). */
-function FillFromDocument({ setValue }) {
+function FillFromDocument({ setValue, onFilled }) {
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -468,16 +505,19 @@ function FillFromDocument({ setValue }) {
     try {
       const { found } = await readRegistrationDocument(file);
       const filled = [];
+      const names = [];
       for (const [field, name] of Object.entries(FILLABLE)) {
         if (found[field]) {
           setValue(field, found[field], { shouldValidate: true });
-          filled.push(name);
+          filled.push(field);
+          names.push(name);
         }
       }
       if (found.gstin) setValue("gst_registered", true);
+      onFilled(filled);
       setMessage(
-        filled.length
-          ? `Filled in: ${filled.join(", ")}. Check them before you register.`
+        names.length
+          ? `Filled in: ${names.join(", ")}.`
           : "We could not find any details in this file. Please type them in.",
       );
     } catch (failure) {
