@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from app import app
 from filings import DONE, filing_name
-from helpers import india_date, notify, send_email, today_in_india
+from helpers import date, notify, send_email, now
 from models import Business, CaProfile, ComplianceItem, Engagement, EngagementItem, ReminderLog, User, db, now
 
 
@@ -64,7 +64,7 @@ def send_reminders(today):
         business = db.session.get(Business, filing.business_id)
         if kind is None or ReminderLog.query.filter_by(compliance_item_id=filing.id, kind=kind).first():
             continue
-        if filing.due_date < india_date(business.created_at):  # due before the business joined
+        if filing.due_date < date(business.created_at):  # due before the business joined
             continue
         db.session.add(ReminderLog(compliance_item_id=filing.id, kind=kind, sent_at=now()))
         count += 1
@@ -95,12 +95,12 @@ def send_reminders(today):
 if __name__ == "__main__":
     with app.app_context():
         if "--once" in sys.argv:
-            day = date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else today_in_india()
+            day = date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else now()
             print("Overdue:", mark_overdue(day), "- reminders recorded:", send_reminders(day))
             sys.exit()
         last_reminder_day = None
         while True:
-            mark_overdue(today_in_india())
+            mark_overdue(now())
             india_now = datetime.now(ZoneInfo("Asia/Kolkata"))
             if india_now.strftime("%H:%M") >= "08:15" and last_reminder_day != india_now.date():
                 print("Reminders recorded:", send_reminders(india_now.date()))

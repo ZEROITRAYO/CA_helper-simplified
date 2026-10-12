@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from app import app
 from filings import sync_filings
-from helpers import REPO, today_in_india
+from helpers import REPO, now
 from models import CatalogService, NicCode, ObligationTemplate, PenaltyRule, RegulatoryProfile, RuleThreshold, db
 
 SERVICE_CATALOG = [  # (code, name, description, unit)
@@ -215,7 +215,7 @@ def seed():
 
     # Filings made under older rules get the current periods and due dates.
     for profile in RegulatoryProfile.query.all():
-        sync_filings(profile.business_id, profile, today_in_india())
+        sync_filings(profile.business_id, profile, now())
     db.session.commit()
     print("Seeded: service catalog, rule thresholds, obligation templates, penalty rules, NIC codes, "
           "filings synced to the rules")

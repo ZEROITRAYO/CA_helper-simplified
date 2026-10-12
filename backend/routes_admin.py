@@ -6,7 +6,7 @@ from flask import jsonify, request
 from app import app
 from filings import DONE
 from helpers import (
-    current_user, error, india_date, iso, page_of, role_required, send_document, send_email, today_in_india,
+    current_user, error, date, iso, page_of, role_required, send_document, send_email, now,
 )
 from models import Business, CaProfile, ComplianceItem, Document, Engagement, User, db, now
 from routes_marketplace import profile_to_dict
@@ -38,9 +38,9 @@ def admin_stats():
     due = late = 0
     for filing in ComplianceItem.query.all():
         statuses[filing.status] += 1
-        if filing.due_date < today_in_india():
+        if filing.due_date < now():
             due += 1
-            filed_on_time = filing.status in DONE and filing.filed_at and india_date(filing.filed_at) <= filing.due_date
+            filed_on_time = filing.status in DONE and filing.filed_at and date(filing.filed_at) <= filing.due_date
             if not filed_on_time:
                 late += 1
     open_engagements = Engagement.query.filter(Engagement.status.in_(["requested", "active"])).count()

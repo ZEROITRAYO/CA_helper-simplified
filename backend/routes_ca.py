@@ -6,7 +6,7 @@ from flask import jsonify, request
 
 from app import app
 from filings import DONE, checklist, checklist_with_ticks, filing_name, filing_to_dict, missing_documents, record_filed
-from helpers import as_uuid, current_user, email_notice, error, iso, notify, role_required, today_in_india
+from helpers import as_uuid, current_user, email_notice, error, iso, notify, role_required, now
 from models import Business, CaProfile, DocumentRequest, Engagement, EngagementItem, User, db, now
 from routes_business import business_page
 from routes_documents import documents_by_filing, request_to_dict
@@ -85,7 +85,7 @@ def list_clients():
         requests = open_requests(filings.values(), filings)
         rows.append({"business_id": str(business_id), "business_name": db.session.get(Business, business_id).legal_name,
                      "filing_count": len(filings), "open_filing_count": len(not_filed),
-                     "open_request_count": len(requests), **urgency(not_filed, len(requests), today_in_india())})
+                     "open_request_count": len(requests), **urgency(not_filed, len(requests), now())})
     rows.sort(key=lambda row: (-row["score"], row["business_name"]))
     return jsonify(rows)
 

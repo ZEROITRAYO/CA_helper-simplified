@@ -14,8 +14,8 @@ from filings import (
     sync_filings,
 )
 from helpers import (
-    GST_STATES, current_user, error, format_inr, gstin_error, india_date, iso, money, my_business, read_amount,
-    read_upload, remove_document, role_required, send_document, state_code, today_in_india,
+    GST_STATES, current_user, error, format_inr, gstin_error, date, iso, money, my_business, read_amount,
+    read_upload, remove_document, role_required, send_document, state_code, now,
 )
 from models import (
     Business, ComplianceItem, Document, NicCode, PenaltyRule, RegulatoryProfile, RuleThreshold, db, now,
@@ -101,7 +101,7 @@ def read_business_form(data):
 
 def limit(key):
     """A legal limit from the rule_thresholds table, e.g. limit("gst.qrmp.max_turnover")."""
-    row = (RuleThreshold.query.filter(RuleThreshold.key == key, RuleThreshold.effective_from <= today_in_india())
+    row = (RuleThreshold.query.filter(RuleThreshold.key == key, RuleThreshold.effective_from <= now())
            .order_by(RuleThreshold.effective_from.desc()).first())
     if row is None:
         raise RuntimeError(f"The rule {key} is missing. Run: python seed.py")
@@ -203,7 +203,7 @@ def register_business():
     db.session.flush()
     profile = RegulatoryProfile(business_id=business.id, **compute_profile(business))
     db.session.add(profile)
-    sync_filings(business.id, profile, today_in_india())  # this year's filings
+    sync_filings(business.id, profile, now())  # this year's filings
     db.session.commit()
     return jsonify(business_page(business)), 201
 
@@ -233,7 +233,7 @@ def update_business():
     new = compute_profile(business)
     for field in new:
         setattr(profile, field, new[field])
-    filings = sync_filings(business.id, profile, today_in_india())
+    filings = sync_filings(business.id, profile, now())
     db.session.commit()
     changed = []
     for line in PROFILE_LINES:
@@ -311,7 +311,7 @@ def find_filing(item_id):
 def dashboard():
     """The home page: the next deadline and how many filings are due, late or with a CA."""
     business = my_business()
-    today = today_in_india()
+    today = now()
     result = {"message": f"Welcome, {current_user().full_name}", "registered": business is not None,
               "next_deadline": None, "due_this_month": 0, "overdue": 0, "with_ca": 0}
     if business is None:
@@ -460,7 +460,7 @@ def peer_insights(item_id):
         result.update(scope=scope, business_count=len(businesses), filing_count=len(group))
         for path in ("self", "ca"):
             items = [f for f in group if f.filing_path == path]
-            on_time = [f for f in items if india_date(f.filed_at) <= f.due_date]
+            on_time = [f for f in items if date(f.filed_at) <= f.due_date]
             result[path] = {"count": len(items), "share_pct": round(len(items) * 100 / len(group)),
                             "on_time_pct": round(len(on_time) * 100 / len(items)) if items else None}
         break
@@ -519,7 +519,7 @@ def penalty_exposure():
     business = my_business()
     if business is None:
         return error(404, "BUSINESS_NOT_FOUND", "Register your business first.")
-    today = today_in_india()
+    today = now()
     items = []
     for filing in ComplianceItem.query.filter_by(business_id=business.id).order_by(ComplianceItem.due_date):
         if filing.status not in DONE and filing.due_date < today:
@@ -544,4 +544,4 @@ def penalty_estimate(item_id):
         tax_due = read_amount(request.args["tax_due"], 0, 10**10)
         if tax_due is None:
             return error(422, "VALIDATION_ERROR", "Enter the tax due in rupees.")
-    return jsonify(estimate(filing, today_in_india(), tax_due))
+    return jsonify(estimate(filing, now(), tax_due))

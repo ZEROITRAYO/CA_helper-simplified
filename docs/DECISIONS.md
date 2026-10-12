@@ -652,7 +652,7 @@ modules separate (CLAUDE.md rule 9).
 - **`current_business()`** in `utils/decorators.py` (next to `current_user()`) finds the logged-in user's business
   (404 `BUSINESS_NOT_FOUND`). It lives in shared code so compliance does not import onboarding (onboarding already
   imports compliance) and other modules can use it too.
-- **`today_in_india()`** in `models/base.py`: due dates and financial years use the Indian date.
+- **`now()`** in `models/base.py`: due dates and financial years use the Indian date.
 - `rule_version` is `"v1"`, a version of the profile logic, bumped when `compute_profile()` changes.
 
 **Why:** the marketplace's engagements need businesses and filings, and filings need the profile; this is the

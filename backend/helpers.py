@@ -62,11 +62,11 @@ def as_uuid(value):
         return None
 
 
-def today_in_india():
+def now():
     return datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
 
-def india_date(time):
+def date(time):
     """The date in India of a stored (UTC) time."""
     return time.astimezone(ZoneInfo("Asia/Kolkata")).date()
 
@@ -230,7 +230,7 @@ def save_document(owner_id, uploader_id, doc_type, upload, data):
                         sha256=hashlib.sha256(data).hexdigest())
     try:
         text = ocr.extract_text(data, upload.mimetype)
-        document.ocr_fields = ocr.read_proof_fields(text, today_in_india())
+        document.ocr_fields = ocr.read_proof_fields(text, now())
         document.ocr_status = "processed"
     except ValueError as problem:  # the file could not be read; the message says why
         document.ocr_status, document.ocr_fields = "failed", {"error": str(problem)}

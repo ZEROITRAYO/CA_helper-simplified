@@ -9,7 +9,7 @@ from datetime import date
 import yaml
 from flask import request
 
-from helpers import REPO, error, iso, read_upload, save_document, today_in_india
+from helpers import REPO, error, iso, read_upload, save_document, now
 from models import (
     ChecklistTick, ComplianceItem, ComplianceItemDocument, Document, DocumentRequest, Engagement,
     EngagementItem, ObligationTemplate, ReminderLog, db, now,
@@ -211,7 +211,7 @@ def refresh_status(filing):
     """A filing not started yet: overdue after its due date, else from its checklist."""
     if filing.status not in NOT_STARTED:
         return
-    if filing.due_date < today_in_india():
+    if filing.due_date < now():
         filing.status = "overdue"
     elif not any(entry["ticked"] for entry in checklist_with_ticks(filing)):
         filing.status = "upcoming"
