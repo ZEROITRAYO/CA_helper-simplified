@@ -62,7 +62,7 @@ def admin_users():
         query = query.filter(User.full_name.ilike(f"%{search}%") | User.email.ilike(f"%{search}%"))
     return jsonify(page_of(query, lambda user: {
         "id": str(user.id), "full_name": user.full_name, "email": user.email, "role": user.role,
-        "email_verified": user.email_verified_at is not None, "created_at": iso(user.created_at)}))
+        "email_verified": user.email_verified, "created_at": iso(user.created_at)}))
 
 
 @app.route("/api/v1/admin/cas")

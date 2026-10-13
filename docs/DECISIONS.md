@@ -561,7 +561,7 @@ closes the gap between two runs. Letting the business choose again keeps the CA 
   a TODO_VERIFY row), served by `GET /onboarding/states`: one list for backend and frontend, no table or package.
   A state typed earlier that is not on the list is flagged for the user to choose again. GSTINs are checked for
   the mod-36 check character, the state code and the PAN (tests use synthetic GSTINs only).
-- **Consent:** signup needs `terms_accepted: true` and sets `users.terms_accepted_at`; login says whether it was
+- **Consent:** signup is refused without `terms_accepted: true` (nothing is stored: every account has agreed); login says whether it was
   given; older accounts see a one-time consent step. `/terms` is short plain language.
 - **Encrypted file storage** (`app/utils/storage.py`): PDF/JPG/PNG recognised by their first bytes, a size limit,
   Fernet with the same `FIELD_ENCRYPTION_KEY`, files in `UPLOAD_DIR` outside the tracked repo. First use: the
@@ -767,7 +767,7 @@ machine without breaking anything. The usual failures were a missing migration, 
 ## 2026-09-26: Signup, email OTP and passwords
 
 **What**
-- **Signup** creates only `business` and `ca` accounts. A new account starts with `users.email_verified_at` empty
+- **Signup** creates only `business` and `ca` accounts. A new account starts with `users.email_verified` false
   and cannot log in (403 `EMAIL_NOT_VERIFIED`) until the user enters the 6-digit code we emailed. Verifying does
   not log the user in: they log in with their password afterwards. The migration marks existing users verified;
   seeded demo users are created verified.

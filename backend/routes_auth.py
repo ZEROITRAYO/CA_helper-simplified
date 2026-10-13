@@ -79,7 +79,7 @@ def signup():
     if find_user(email):
         return error(409, "EMAIL_TAKEN", "An account with this email already exists.")
     user = User(email=email, password_hash=hash_password(data["password"]), full_name=full_name,
-                role=data["role"], terms_accepted_at=now())
+                role=data["role"])
     db.session.add(user)
     db.session.flush()
     send_code(user, "verify_email")
@@ -90,12 +90,12 @@ def signup():
 def verify_email():
     data = request.get_json(silent=True) or {}
     user = find_user(data.get("email"))
-    if user and user.email_verified_at:
+    if user and user.email_verified:
         return error(409, "EMAIL_ALREADY_VERIFIED", "This email is already verified. Log in.")
     problem = code_problem(user, "verify_email", data.get("code"))
     if problem:
         return problem
-    user.email_verified_at = now()
+    user.email_verified = True
     db.session.commit()
     return "", 204
 
@@ -105,7 +105,7 @@ def resend_code():
     user = find_user((request.get_json(silent=True) or {}).get("email"))
     if user is None:
         return error(404, "USER_NOT_FOUND", "No account uses this email.")
-    if user.email_verified_at:
+    if user.email_verified:
         return error(409, "EMAIL_ALREADY_VERIFIED", "This email is already verified. Log in.")
     send_code(user, "verify_email")
     return "", 204
@@ -118,7 +118,7 @@ def login():
     password = data.get("password")
     if user is None or not isinstance(password, str) or not check_password(user.password_hash, password):
         return error(401, "INVALID_CREDENTIALS", "Wrong email or password.")
-    if user.email_verified_at is None:
+    if not user.email_verified:
         return error(403, "EMAIL_NOT_VERIFIED", "Verify your email before logging in.")
     token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
     return jsonify({"access_token": token, "user": user_to_dict(user)})
@@ -149,8 +149,7 @@ def reset_password():
     problem = code_problem(user, "reset_password", data.get("code"))
     if problem:
         return problem
-    if user.email_verified_at is None:  # the emailed code proves the email too
-        user.email_verified_at = now()
+    user.email_verified = True  # the emailed code proves the email too
     save_new_password(user, data["new_password"])
     return "", 204
 

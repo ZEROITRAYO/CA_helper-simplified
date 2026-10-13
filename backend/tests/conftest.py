@@ -66,7 +66,7 @@ def login(client):
     def make(role, email=None, name="Test User"):
         email = email or f"{role}{User.query.count()}@example.com"
         db.session.add(User(email=email, password_hash=hash_password(PASSWORD), full_name=name, role=role,
-                            email_verified_at=now()))
+                            email_verified=True))
         db.session.commit()
         token = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD}).get_json()
         return {"Authorization": "Bearer " + token["access_token"]}

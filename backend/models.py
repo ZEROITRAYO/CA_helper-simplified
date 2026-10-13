@@ -51,8 +51,7 @@ class User(Table):
     password_hash = db.Column(db.String(255))
     full_name = db.Column(db.String(200))
     role = db.Column(db.String(50))  # "business", "ca" or "admin"
-    email_verified_at = db.Column(db.DateTime(timezone=True))  # login is refused until it is set
-    terms_accepted_at = db.Column(db.DateTime(timezone=True))
+    email_verified = db.Column(db.Boolean, default=False)  # login is refused until it is true
     email_notifications = db.Column(db.Boolean, default=True)
 
 

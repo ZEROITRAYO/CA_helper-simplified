@@ -40,7 +40,7 @@ Column types are in `models.py`; this lists what each table is for and its key f
 ### Accounts
 | Table | One row is... | Key fields |
 |---|---|---|
-| `users` | a login account | email (unique, trimmed and lowercased), password_hash (argon2), full_name, role, email_verified_at (null until the emailed code is entered; login is refused until then), terms_accepted_at (set at signup), **email_notifications** (the user's one switch for notification emails, default true; login and password codes always go out) |
+| `users` | a login account | email (unique, trimmed and lowercased), password_hash (argon2), full_name, role, email_verified (false until the emailed code is entered; login is refused until then), **email_notifications** (the user's one switch for notification emails, default true; login and password codes always go out) |
 | `email_otps` | a 6-digit code emailed to a user | user_id → users, purpose, code_hash (argon2), expires_at (10 minutes), used_at. Only the newest code per user and purpose counts; a code works once |
 
 ### Onboarding
