@@ -6,7 +6,6 @@ import { z } from "zod";
 
 import {
   ApiRequestError,
-  changePassword,
   errorMessage,
   forgotPassword,
   resendVerificationCode,
@@ -528,53 +527,6 @@ export function ResetPasswordPage() {
         <ResendButton form={form} send={forgotPassword} setMessage={setMessage} />
       </form>
       <FooterLink to="/login">Back to log in</FooterLink>
-    </FormCard>
-  );
-}
-
-// --- ChangePasswordPage ------------------------------------------------------------------------
-
-const changeSchema = z
-  .object({
-    current_password: z.string().min(1, "Enter your current password."),
-    password: newPasswordSchema,
-    confirm_password: z.string(),
-  })
-  .refine(passwordsMatch, PASSWORDS_MATCH_ERROR);
-
-const EMPTY_FORM = { current_password: "", password: "", confirm_password: "" };
-
-/** Change password (every role); a wrong current password is 400, so no logout. */
-export function ChangePasswordPage() {
-  const [message, setMessage] = useState({});
-  const form = useZodForm(changeSchema, EMPTY_FORM);
-
-  async function onSubmit({ current_password, password }) {
-    setMessage({});
-    try {
-      await changePassword(current_password, password);
-      form.reset(EMPTY_FORM);
-      setMessage({ notice: "Your password is changed." });
-    } catch (error) {
-      setMessage({ error: errorMessage(error) });
-    }
-  }
-
-  return (
-    <FormCard title="Change password" description="We will email you when your password changes.">
-      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
-        <FormField
-          label="Current password"
-          type="password"
-          autoComplete="current-password"
-          {...field(form, "current_password")}
-        />
-        <NewPasswordFields form={form} title="New password" />
-        <Messages message={message} />
-        <SubmitButton form={form} busyText="Saving...">
-          Change password
-        </SubmitButton>
-      </form>
     </FormCard>
   );
 }

@@ -12,7 +12,7 @@ from helpers import (
 )
 from models import (
     CaProfile, ComplianceItem, ComplianceItemDocument, Document, DocumentRequest, Engagement,
-    EngagementItem, User, db, now,
+    EngagementItem, User, db, db_now,
 )
 
 DOCUMENT_TYPES = ("gst_certificate", "pan_card", "sales_register", "purchase_register", "bank_statement",
@@ -249,7 +249,7 @@ def fulfil_document_request(request_id):
     if problem:
         return problem
     document_request.status = "fulfilled"
-    document_request.fulfilled_at, document_request.document_id = now(), document.id
+    document_request.fulfilled_at, document_request.document_id = db_now(), document.id
     ca_user = db.session.get(User, engagement.ca.user_id)
     # Say who wrote to whom, so the message cannot be read the wrong way round.
     title = f"{business.legal_name} sent you the document you asked for"

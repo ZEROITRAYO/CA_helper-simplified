@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 db = SQLAlchemy()
 
 
-def now():
+def db_now():
     return datetime.now(timezone.utc)
 
 
@@ -38,8 +38,8 @@ class Table(db.Model):
 
     __abstract__ = True
     id = db.Column(db.Uuid, primary_key=True, default=uuid.uuid4)
-    created_at = db.Column(db.DateTime(timezone=True), default=now)
-    updated_at = db.Column(db.DateTime(timezone=True), default=now, onupdate=now)
+    created_at = db.Column(db.DateTime(timezone=True), default=db_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=db_now, onupdate=db_now)
 
 
 # --- Accounts ---
@@ -295,7 +295,7 @@ class Engagement(Table):
     ca_profile_id = db.Column(db.Uuid, db.ForeignKey("ca_profiles.id"))
     ca = db.relationship("CaProfile")
     status = db.Column(db.String(50), default="requested")
-    requested_at = db.Column(db.DateTime(timezone=True), default=now)
+    requested_at = db.Column(db.DateTime(timezone=True), default=db_now)
     responded_at = db.Column(db.DateTime(timezone=True))
     activated_at = db.Column(db.DateTime(timezone=True))
     completed_at = db.Column(db.DateTime(timezone=True))

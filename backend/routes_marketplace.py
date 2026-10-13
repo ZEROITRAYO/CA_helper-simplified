@@ -15,7 +15,7 @@ from helpers import (
 )
 from models import (
     CaProfile, CaService, CatalogService, ComplianceItem, Engagement, EngagementItem, Rating,
-    RegulatoryProfile, User, db, now,
+    RegulatoryProfile, User, db, db_now,
 )
 from filings import open_filing_ids
 
@@ -344,7 +344,7 @@ def send_request():
         if not option:
             return error(400, "SERVICE_NOT_OFFERED", "This CA does not offer that service for this filing.")
         chosen.append((filing, as_uuid(service_id), read_amount(option[0]["price"], 0, 10**9)))
-    engagement = Engagement(business_id=business.id, ca_profile_id=profile.id, status="requested", requested_at=now())
+    engagement = Engagement(business_id=business.id, ca_profile_id=profile.id, status="requested", requested_at=db_now())
     db.session.add(engagement)
     db.session.flush()
     for filing, service_id, price in chosen:
@@ -421,7 +421,7 @@ def accept_request(engagement_id):
     for item in EngagementItem.query.filter_by(engagement_id=engagement.id):
         item.agreed_price = item.listed_price
         item.filing.status, item.filing.filing_path = "with_ca", "ca"
-    engagement.status, engagement.responded_at, engagement.activated_at = "active", now(), now()
+    engagement.status, engagement.responded_at, engagement.activated_at = "active", db_now(), db_now()
     return tell_business(engagement, "Your CA accepted your request",
                          "accepted your request at their listed prices. The work has started.", "engagement_accepted")
 
@@ -432,7 +432,7 @@ def decline_request(engagement_id):
     engagement, problem = find_engagement(engagement_id, "requested")
     if problem:
         return problem
-    engagement.status, engagement.responded_at = "declined", now()
+    engagement.status, engagement.responded_at = "declined", db_now()
     return tell_business(engagement, "Your CA declined your request",
                          'declined your request. You can ask another CA in "Find a CA".', "engagement_declined")
 
@@ -443,7 +443,7 @@ def complete_engagement(engagement_id):
     engagement, problem = find_engagement(engagement_id, "active")
     if problem:
         return problem
-    engagement.status, engagement.completed_at = "completed", now()
+    engagement.status, engagement.completed_at = "completed", db_now()
     return tell_business(engagement, "Your CA completed the work",
                          'marked the work as completed. You can rate it in "My engagements".')
 

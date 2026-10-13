@@ -8,7 +8,7 @@ from filings import DONE
 from helpers import (
     current_user, error, date, iso, page_of, role_required, send_document, send_email, now,
 )
-from models import Business, CaProfile, ComplianceItem, Document, Engagement, User, db, now
+from models import Business, CaProfile, ComplianceItem, Document, Engagement, User, db, db_now
 from routes_marketplace import profile_to_dict
 
 
@@ -105,7 +105,7 @@ def verify_ca(ca_id):
     if profile.cop_document_id is None:
         return error(409, "CERTIFICATE_MISSING", "Ask the CA to upload their certificate first.")
     profile.verification_status, profile.rejection_reason = "verified", None
-    profile.verified_at, profile.verified_by_id = now(), current_user().id
+    profile.verified_at, profile.verified_by_id = db_now(), current_user().id
     db.session.commit()
     if profile.user.email_notifications:
         send_email(profile.user.email, "Your CA Helper profile is verified", "ca_verified", name=profile.user.full_name)

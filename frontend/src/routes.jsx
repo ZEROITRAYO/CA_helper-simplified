@@ -1,10 +1,9 @@
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router";
 
 import { useAuth } from "@/auth";
-import { Button, buttonClass } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { cn, ROLE_HOME, USER_ROLE_LABELS } from "@/lib";
 import {
-  ChangePasswordPage,
   ForgotPasswordPage,
   HomePage,
   LoginPage,
@@ -75,7 +74,7 @@ function roleArea(role, children) {
         <AppShell role={role} nav={NAV[role]} />
       </RequireRole>
     ),
-    children: [...children, { path: "change-password", element: <ChangePasswordPage /> }],
+    children,
   };
 }
 
@@ -162,9 +161,6 @@ export function AppShell({ role, nav }) {
         </nav>
         <div className="space-y-2 border-t pt-4">
           <p className="truncate text-sm">{user?.full_name}</p>
-          <Link to={`${home}/change-password`} className={buttonClass("ghost", "sm", "w-full")}>
-            Change password
-          </Link>
           <Button variant="outline" size="sm" className="w-full" onClick={logout}>
             Log out
           </Button>

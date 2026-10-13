@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from app import app
 from filings import DONE, filing_name
 from helpers import date, notify, send_email, now
-from models import Business, CaProfile, ComplianceItem, Engagement, EngagementItem, ReminderLog, User, db, now
+from models import Business, CaProfile, ComplianceItem, Engagement, EngagementItem, ReminderLog, User, db, db_now
 
 
 def mark_overdue(today):
@@ -66,7 +66,7 @@ def send_reminders(today):
             continue
         if filing.due_date < date(business.created_at):  # due before the business joined
             continue
-        db.session.add(ReminderLog(compliance_item_id=filing.id, kind=kind, sent_at=now()))
+        db.session.add(ReminderLog(compliance_item_id=filing.id, kind=kind, sent_at=db_now()))
         count += 1
         due = f"{filing.due_date.day} {filing.due_date:%b %Y}"  # e.g. "20 Sep 2026"
         if kind == "overdue":
@@ -95,7 +95,7 @@ def send_reminders(today):
 if __name__ == "__main__":
     with app.app_context():
         if "--once" in sys.argv:
-            day = date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else now()
+            day = datetime.fromisoformat(sys.argv[2]).date() if len(sys.argv) > 2 else now()
             print("Overdue:", mark_overdue(day), "- reminders recorded:", send_reminders(day))
             sys.exit()
         last_reminder_day = None

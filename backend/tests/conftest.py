@@ -23,7 +23,7 @@ server.dispose()
 
 from app import app  # noqa: E402
 from helpers import hash_password, outbox  # noqa: E402
-from models import User, db, now  # noqa: E402
+from models import User, db  # noqa: E402
 from seed import seed  # noqa: E402
 
 app.config["MAIL_SUPPRESS_SEND"] = True

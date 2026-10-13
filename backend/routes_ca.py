@@ -7,7 +7,7 @@ from flask import jsonify, request
 from app import app
 from filings import DONE, checklist, checklist_with_ticks, filing_name, filing_to_dict, missing_documents, record_filed
 from helpers import as_uuid, current_user, email_notice, error, iso, notify, role_required, now
-from models import Business, CaProfile, DocumentRequest, Engagement, EngagementItem, User, db, now
+from models import Business, CaProfile, DocumentRequest, Engagement, EngagementItem, User, db, db_now
 from routes_business import business_page
 from routes_documents import documents_by_filing, request_to_dict
 
@@ -201,7 +201,7 @@ def ca_mark_filed(business_id, item_id):
     items = EngagementItem.query.filter_by(engagement_id=engagement.id).all()
     completed = all(item.filing.status in DONE for item in items)
     if completed:
-        engagement.status, engagement.completed_at = "completed", now()
+        engagement.status, engagement.completed_at = "completed", db_now()
         notify(owner, "engagement_update", "Your CA completed the work",
                f'{user.full_name} filed every filing of your request. You can rate the work in "My engagements".',
                "/business/engagements")

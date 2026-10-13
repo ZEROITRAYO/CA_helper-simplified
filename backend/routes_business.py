@@ -18,7 +18,7 @@ from helpers import (
     read_upload, remove_document, role_required, send_document, state_code, now,
 )
 from models import (
-    Business, ComplianceItem, Document, NicCode, PenaltyRule, RegulatoryProfile, RuleThreshold, db, now,
+    Business, ComplianceItem, Document, NicCode, PenaltyRule, RegulatoryProfile, RuleThreshold, db, db_now,
 )
 
 ENTITY_TYPES = ("individual", "proprietorship", "partnership", "llp", "private_limited")
@@ -161,7 +161,7 @@ def compute_profile(business):
             "other_audit_applicable": other_audit,
             "files_24q": business.deducts_tds and business.pays_salary_above_limit,
             "files_26q": business.deducts_tds, "roc_not_tracked": entity in COMPANY_TYPES,
-            "explanations": explanations, "rule_version": "v2", "computed_at": now()}
+            "explanations": explanations, "rule_version": "v2", "computed_at": db_now()}
 
 
 def business_page(business):

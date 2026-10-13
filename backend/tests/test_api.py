@@ -63,18 +63,16 @@ def test_weak_password_and_admin_signup_are_refused(client):
     assert client.post("/api/v1/auth/signup", json={**base, "password": "Passw0rd1", "role": "admin"}).status_code == 422
 
 
-def test_reset_and_change_password(client, login):
-    headers = login("business", "me@example.com")
+def test_reset_password(client, login):
+    login("business", "me@example.com")
     assert client.post("/api/v1/auth/forgot-password", json={"email": "me@example.com"}).status_code == 204
     code = re.search(r"\b(\d{6})\b", outbox[-1].get_content()).group(1)
     reset = {"email": "me@example.com", "code": code, "new_password": "NewPassw0rd"}
     assert client.post("/api/v1/auth/reset-password", json=reset).status_code == 204
-    assert client.post("/api/v1/auth/reset-password", json=reset).get_json()["error"]["code"] == "OTP_INVALID"
-    change = {"current_password": "wrong", "new_password": "Another1pass"}
-    assert client.post("/api/v1/auth/change-password", json=change, headers=headers).status_code == 400
-    change["current_password"] = "NewPassw0rd"
-    assert client.post("/api/v1/auth/change-password", json=change, headers=headers).status_code == 204
     assert outbox[-1]["Subject"] == "Your CA Helper password was changed"
+    assert client.post("/api/v1/auth/reset-password", json=reset).get_json()["error"]["code"] == "OTP_INVALID"
+    login_form = {"email": "me@example.com", "password": "NewPassw0rd"}
+    assert client.post("/api/v1/auth/login", json=login_form).status_code == 200
 
 
 def test_each_role_sees_only_its_pages(client, login):

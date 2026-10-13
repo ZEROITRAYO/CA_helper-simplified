@@ -1,8 +1,8 @@
 Hello {{ name }},
 
-Welcome to CA Helper. Your email verification code is:
+Welcome to CA Helper. Your email verification OTP is:
 
-    {{ code }}
+    {{ otp }}
 
 It expires in {{ minutes }} minutes. Enter it on the "Verify your email" page to finish signing up.
 

@@ -203,13 +203,6 @@ export function resetPassword(email, code, newPassword) {
   return post("/api/v1/auth/reset-password", { email, code, new_password: newPassword });
 }
 
-/** For the logged-in user. */
-export function changePassword(currentPassword, newPassword) {
-  return post("/api/v1/auth/change-password", {
-    current_password: currentPassword,
-    new_password: newPassword,
-  });
-}
 
 export const SETTINGS_KEY = ["auth", "settings"];
 

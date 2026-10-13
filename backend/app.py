@@ -40,19 +40,19 @@ with app.app_context():
 
 @jwt.user_lookup_loader
 def load_user(header, payload):
-    return db.session.get(User, uuid.UUID(payload["sub"]))  # the token holds the user's id
+    return db.session.get(User, uuid.UUID(payload["sub"]))  #token has the user id
 
+@jwt.unauthorized_loader
+def no_token(reason):
+    return jsonify({"error": {"code": "AUTH_REQUIRED", "message": "Please log in."}}), 401
 
-def token_error(code, message):
-    return jsonify({"error": {"code": code, "message": message}}), 401
+@jwt.invalid_token_loader
+def bad_token(reason):
+    return jsonify({"error": {"code": "TOKEN_INVALID", "message": "Please log in again."}}), 401
 
-
-jwt.unauthorized_loader(lambda reason: token_error("AUTH_REQUIRED", "Please log in."))
-jwt.invalid_token_loader(lambda reason: token_error("TOKEN_INVALID", "Please log in again."))
-jwt.expired_token_loader(lambda header, payload: token_error("TOKEN_EXPIRED", "Please log in again."))
-jwt.user_lookup_error_loader(
-    lambda header, payload: token_error("ACCOUNT_INACTIVE", "This account no longer exists.")
-)
+@jwt.user_lookup_error_loader
+def user_gone(header, payload):
+    return jsonify({"error": {"code": "ACCOUNT_INACTIVE", "message": "This account no longer exists."}}), 401
 
 
 # --- Errors as JSON, and the health check ---
@@ -82,9 +82,9 @@ def health():
 
 
 # The routes (they use `app` from this file, so they are imported last).
-import routes_admin  # noqa: E402, F401
-import routes_auth  # noqa: E402, F401
-import routes_business  # noqa: E402, F401
-import routes_ca  # noqa: E402, F401
-import routes_documents  # noqa: E402, F401
-import routes_marketplace  # noqa: E402, F401
+import routes_admin  
+import routes_auth  
+import routes_business  
+import routes_ca  
+import routes_documents  
+import routes_marketplace

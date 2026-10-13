@@ -775,13 +775,12 @@ machine without breaking anything. The usual failures were a missing migration, 
   `hash_password()` as passwords), valid 10 minutes and 5 wrong guesses. Only the newest code per user and purpose
   counts. At most one new code a minute per account; extra requests are ignored silently. A wrong guess is
   committed before the 400 is raised, the one place a service commits before an error.
-- **Password rule:** 8 to 128 characters with at least one letter and one number (signup, reset, change), checked
+- **Password rule:** 8 to 128 characters with at least one letter and one number (signup, reset), checked
   in `backend/app/schemas/auth.py` and `frontend/src/lib/authRules.js`.
 - **No account enumeration where it is cheap:** resend and forgot-password always answer 204; verify and reset give
   the same `OTP_INVALID` for an unknown email as for a wrong code. Signup still answers 409 `EMAIL_TAKEN`.
-- **Password reset** also verifies an unverified email (the code proves ownership). Reset and change both send a
-  "password was changed" email. A wrong current password is 400 `WRONG_PASSWORD`, not 401, because any 401 logs
-  the frontend out.
+- **Password reset** also verifies an unverified email (the code proves ownership). Reset sends a "password was changed"
+  email. There is no change-password page: a logged-in user who wants a new password uses "Forgot password".
 - **Email:** `send_email()` in `app/utils/email.py` uses the standard library (`smtplib`, `EmailMessage`) and
   Flask's Jinja `render_template` on plain-text files in `app/templates/email/`. No new package. It runs inside
   the request (not the worker), logs a failure without the address and never raises. Tests set
@@ -789,8 +788,7 @@ machine without breaking anything. The usual failures were a missing migration, 
   `MAIL_DEFAULT_SENDER`; no TLS or SMTP login yet (Mailpit needs neither).
 - **Frontend:** plain async functions in `api/auth.js` (no TanStack mutations; the forms use React Hook Form's
   `isSubmitting`, like the login page). The email moves between pages in the router's location state, never in the
-  URL. `FormCard` and `FormField` components keep the six account forms short. Change password lives at
-  `<area>/change-password` in every role's area, linked from the sidebar.
+  URL. `FormCard` and `FormField` components keep the six account forms short.
 
 **Why:** the smallest flow that is safe enough to explain in the viva: codes rather than emailed links (no frontend
 URL setting, nothing to click in the wrong browser), no new dependencies, and every rule in one place in

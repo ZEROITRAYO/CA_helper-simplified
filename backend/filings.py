@@ -12,7 +12,7 @@ from flask import request
 from helpers import REPO, error, iso, read_upload, save_document, now
 from models import (
     ChecklistTick, ComplianceItem, ComplianceItemDocument, Document, DocumentRequest, Engagement,
-    EngagementItem, ObligationTemplate, ReminderLog, db, now,
+    EngagementItem, ObligationTemplate, ReminderLog, db, db_now,
 )
 
 DONE = ("filed", "filed_verified")  # a filed filing never changes again
@@ -262,12 +262,12 @@ def record_filed(filing, owner_id, uploader, path):
         document = save_document(owner_id, uploader.id, "acknowledgement", upload, data)
         document.fy, document.period_label = filing.fy, filing.period_label
         filing.acknowledgement_document_id = document.id
-    filing.status, filing.filing_path, filing.filed_at = "filed", path, now()
+    filing.status, filing.filing_path, filing.filed_at = "filed", path, db_now()
     filing.acknowledgement_no = number or None
     if filing.acknowledgement_document_id:
         result = verify_acknowledgement(db.session.get(Document, filing.acknowledgement_document_id), filing)
         if result["verified"]:
-            filing.status, filing.verified_at = "filed_verified", now()
+            filing.status, filing.verified_at = "filed_verified", db_now()
             filing.acknowledgement_no = filing.acknowledgement_no or result["acknowledgement_no"]
     return None
 
