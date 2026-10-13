@@ -134,7 +134,7 @@ export function MarketplacePage() {
       <QueryStatus query={cas} />
       {cas.isSuccess && (
         <>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-hint">
             {cas.data.total === 1 ? "1 CA found" : `${cas.data.total} CAs found`}
           </p>
           {cas.data.items.length === 0 ? (
@@ -177,13 +177,13 @@ function CaCard({ ca, service, search }) {
         <CardContent className="space-y-3 text-sm">
           <SpecializationBadges codes={ca.specializations} />
           <p>
-            <span className="text-muted-foreground">Languages: </span>
+            <span className="text-hint">Languages: </span>
             {labelList(CA_LANGUAGE_LABELS, ca.languages)}
           </p>
           {ca.about && <p>{ca.about}</p>}
           {service && ca.price !== null && (
             <p>
-              <span className="text-muted-foreground">Fee for {service.name}: </span>
+              <span className="text-hint">Fee for {service.name}: </span>
               <span className="font-medium">
                 {formatRupees(ca.price) + " " + label(SERVICE_UNIT_LABELS, service.unit)}
               </span>
@@ -221,7 +221,7 @@ function CaDetails({ ca }) {
           <h1 className="text-2xl font-semibold">{ca.full_name}</h1>
           <VerifiedBadge />
         </div>
-        <p className="text-sm text-muted-foreground">{caFacts(ca)}</p>
+        <p className="text-sm text-hint">{caFacts(ca)}</p>
       </div>
 
       <Link to={"/business/marketplace/" + ca.id + "/request"} className={buttonClass()}>
@@ -273,7 +273,7 @@ function CaDetails({ ca }) {
             {ca.reviews.map((review) => (
               <li key={review.created_at}>
                 <Stars stars={review.stars} />{" "}
-                <span className="text-muted-foreground">{formatDateTime(review.created_at)}</span>
+                <span className="text-hint">{formatDateTime(review.created_at)}</span>
                 {review.review && <p>{review.review}</p>}
               </li>
             ))}
@@ -378,10 +378,10 @@ function RequestForm({ caId, filings }) {
             onChange={() => toggle(filing)}
           />
           {filingFormLabel(filing.form_code, filing.period_label)} {filing.period_label}
-          <span className="font-normal text-muted-foreground">· due {formatDate(filing.due_date)}</span>
+          <span className="font-normal text-hint">· due {formatDate(filing.due_date)}</span>
         </label>
         {filing.blocked_reason ? (
-          <p className="mt-1 text-muted-foreground">{filing.blocked_reason}</p>
+          <p className="mt-1 text-hint">{filing.blocked_reason}</p>
         ) : (
           <FilingPrice
             filing={filing}
@@ -427,7 +427,7 @@ function RequestForm({ caId, filings }) {
         <Button onClick={onSend} disabled={busy || ticked.length === 0}>
           {busy ? "Sending..." : "Send request"}
         </Button>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-hint">
           {ticked.length === 0 ? "Tick at least one filing. " : ""}The CA accepts or declines it;
           you can withdraw it until then.
         </p>

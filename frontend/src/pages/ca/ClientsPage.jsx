@@ -60,7 +60,7 @@ export function CaWorkspacePage() {
       </PageTitle>
       <QueryStatus query={clients} />
       {clients.isSuccess && clients.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-hint">
           No active clients yet. Accepted requests in{" "}
           <Link to="/ca/engagements" className="underline">
             My engagements
@@ -87,7 +87,7 @@ function ClientCard({ row }) {
           <span
             className={
               "rounded-md px-2 py-0.5 text-sm tabular-nums " +
-              (row.score > 0 ? "bg-red-100 text-red-800" : "bg-muted text-muted-foreground")
+              (row.score > 0 ? "bg-red-100 text-red-800" : "bg-soft text-hint")
             }
           >
             Urgency {row.score}
@@ -100,14 +100,14 @@ function ClientCard({ row }) {
       </CardHeader>
       <CardContent className="text-sm">
         {row.reasons.length === 0 ? (
-          <p className="text-muted-foreground">Nothing urgent.</p>
+          <p className="text-hint">Nothing urgent.</p>
         ) : (
           <>
             <p className="font-medium">Why flagged</p>
             <ul className="list-disc pl-5">
               {row.reasons.map((reason) => (
                 <li key={reason.reason}>
-                  {reason.reason} <span className="text-muted-foreground">(+{reason.points})</span>
+                  {reason.reason} <span className="text-hint">(+{reason.points})</span>
                 </li>
               ))}
             </ul>
@@ -138,7 +138,7 @@ export function CaClientPage() {
           <Profile business={client.data.business} profile={client.data.profile} />
           <h2 className="text-lg font-semibold">Filings you work on</h2>
           {client.data.filings.length === 0 && (
-            <p className="text-sm text-muted-foreground">No filings in active work.</p>
+            <p className="text-sm text-hint">No filings in active work.</p>
           )}
           {client.data.filings.map((row) => (
             <FilingCard
@@ -177,7 +177,7 @@ function Profile({ business, profile }) {
       <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
         {lines.map(([name, value]) => (
           <div key={name} className="flex gap-2">
-            <dt className="text-muted-foreground">{name}:</dt>
+            <dt className="text-hint">{name}:</dt>
             <dd>{value}</dd>
           </div>
         ))}
@@ -216,7 +216,7 @@ function FilingCard({ businessId, row, onChanged }) {
             {row.checklist.map((entry) => (
               <li key={entry.key}>
                 <span aria-hidden="true">{entry.ticked ? "✓" : "○"}</span> {entry.label}
-                {!entry.required && <span className="text-muted-foreground"> (if it applies)</span>}
+                {!entry.required && <span className="text-hint"> (if it applies)</span>}
               </li>
             ))}
           </ul>
@@ -245,13 +245,13 @@ function Files({ files, labels }) {
     <div>
       <p className="font-medium">Files</p>
       {files.length === 0 ? (
-        <p className="text-muted-foreground">No files yet.</p>
+        <p className="text-hint">No files yet.</p>
       ) : (
         <ul>
           {files.map((file) => (
             <li key={file.document_id + file.checklist_key} className="flex flex-wrap items-center gap-2">
               <span className="break-all">{file.original_filename}</span>
-              <span className="text-muted-foreground">({label(labels, file.checklist_key)})</span>
+              <span className="text-hint">({label(labels, file.checklist_key)})</span>
               <Button
                 variant="link"
                 size="sm"
@@ -346,7 +346,7 @@ function RequestForm({ businessId, item, checklist, onChanged }) {
         <Button type="submit" size="sm" disabled={busy}>
           Send request
         </Button>
-        {sent && <p className="text-muted-foreground">Sent. The client sees it as a to-do.</p>}
+        {sent && <p className="text-hint">Sent. The client sees it as a to-do.</p>}
         <ErrorText>{error}</ErrorText>
       </div>
     </form>
@@ -372,7 +372,7 @@ function MarkFiledForm({ businessId, item, onChanged }) {
     });
   }
 
-  if (done) return <p className="text-muted-foreground">{done}</p>;
+  if (done) return <p className="text-hint">{done}</p>;
   return (
     <form className="space-y-2 rounded-lg border p-3" onSubmit={onSubmit}>
       <p className="font-medium">Mark as filed</p>
@@ -407,7 +407,7 @@ export function CaBatchesPage() {
       </PageTitle>
       <QueryStatus query={batches} />
       {batches.isSuccess && batches.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">No filings to do in your active work.</p>
+        <p className="text-sm text-hint">No filings to do in your active work.</p>
       )}
       {batches.isSuccess &&
         batches.data.map((batch) => (

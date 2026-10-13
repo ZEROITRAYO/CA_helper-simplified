@@ -51,7 +51,7 @@ function NotificationList() {
     <Section title="Inbox" description="Click a notification to read it." contentClassName="space-y-4">
       <QueryStatus query={notifications} />
       {notifications.isSuccess && items.length === 0 && (
-        <p className="text-sm text-muted-foreground">No notifications yet.</p>
+        <p className="text-sm text-hint">No notifications yet.</p>
       )}
       {items.length > 0 && (
         <ul className="divide-y rounded-md border">
@@ -61,8 +61,8 @@ function NotificationList() {
                 type="button"
                 onClick={() => open(entry)}
                 className={
-                  "flex w-full items-baseline justify-between gap-4 px-3 py-2 text-left text-sm hover:bg-muted " +
-                  (entry.read_at === null ? "font-bold" : "text-muted-foreground")
+                  "flex w-full items-baseline justify-between gap-4 px-3 py-2 text-left text-sm hover:bg-soft " +
+                  (entry.read_at === null ? "font-bold" : "text-hint")
                 }
               >
                 <span className="truncate">{entry.title}</span>
@@ -90,7 +90,7 @@ function NotificationView({ entry, onClose }) {
       >
         <div className="space-y-1 border-b pb-3">
           <h2 className="text-lg font-semibold">{entry.title}</h2>
-          <p className="text-xs text-muted-foreground">{formatDateTime(entry.created_at)}</p>
+          <p className="text-xs text-hint">{formatDateTime(entry.created_at)}</p>
         </div>
         <p className="text-sm whitespace-pre-wrap">{entry.body}</p>
         <div className="flex justify-end">
@@ -133,7 +133,7 @@ function EmailSwitch() {
           />
           <span>
             Email me my notifications
-            <span className="block text-xs text-muted-foreground">
+            <span className="block text-xs text-hint">
               Deadline reminders, overdue filings, document requests, CA request updates and rule
               changes. Login and password codes are always emailed.
             </span>

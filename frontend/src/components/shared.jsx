@@ -68,7 +68,7 @@ export function useObjectUrl(blob) {
 export function ErrorText({ children, className }) {
   if (!children) return null;
   return (
-    <p role="alert" className={cn("text-sm text-destructive", className)}>
+    <p role="alert" className={cn("text-sm text-danger", className)}>
       {children}
     </p>
   );
@@ -78,7 +78,7 @@ export function ErrorText({ children, className }) {
 export function Notice({ children }) {
   if (!children) return null;
   return (
-    <p role="status" className="text-sm text-muted-foreground">
+    <p role="status" className="text-sm text-hint">
       {children}
     </p>
   );
@@ -88,7 +88,7 @@ export function Notice({ children }) {
 export function QueryStatus({ query }) {
   const queries = [].concat(query);
   if (queries.some((one) => one.isPending)) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <p className="text-sm text-hint">Loading...</p>;
   }
   const failed = queries.find((one) => one.isError);
   return failed ? <ErrorText>{errorMessage(failed.error)}</ErrorText> : null;
@@ -101,7 +101,7 @@ export function PageTitle({ title, children }) {
   return (
     <div className="space-y-1">
       <h1 className="text-2xl font-semibold">{title}</h1>
-      {children && <p className="text-sm text-muted-foreground">{children}</p>}
+      {children && <p className="text-sm text-hint">{children}</p>}
     </div>
   );
 }
@@ -128,7 +128,7 @@ export function NumberCard({ title, value, note, alert, children }) {
       <CardHeader>
         <CardDescription>{title}</CardDescription>
         <CardTitle className={cn("text-2xl tabular-nums", alert && "text-red-700")}>{value}</CardTitle>
-        {note && <p className="text-xs text-muted-foreground">{note}</p>}
+        {note && <p className="text-xs text-hint">{note}</p>}
         {children}
       </CardHeader>
     </Card>
@@ -174,7 +174,7 @@ export function Table({ headers, children }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <thead className="border-b text-muted-foreground">
+        <thead className="border-b text-hint">
           <tr>
             {headers.map((header, index) => (
               <th key={index} className={cn("py-2 font-medium", index < headers.length - 1 && "pr-4")}>
@@ -210,7 +210,7 @@ export function Field({ id, label, error, className = "space-y-2", children }) {
     <div className={className}>
       <Label htmlFor={id}>{label}</Label>
       {children}
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
+      {error && <p className="text-sm text-danger">{error.message}</p>}
     </div>
   );
 }
@@ -227,11 +227,11 @@ export function FormField({ id, label, error, hint, ...inputProps }) {
         {...inputProps}
       />
       {error ? (
-        <p id={id + "-error"} className="text-sm text-destructive">
+        <p id={id + "-error"} className="text-sm text-danger">
           {error.message}
         </p>
       ) : (
-        hint && <p className="text-xs text-muted-foreground">{hint}</p>
+        hint && <p className="text-xs text-hint">{hint}</p>
       )}
     </div>
   );
@@ -364,7 +364,7 @@ export function Stars({ stars }) {
 /** A CA's average rating and how many ratings it is based on. */
 export function RatingSummary({ average, count }) {
   if (!count) {
-    return <span className="text-muted-foreground">No ratings yet</span>;
+    return <span className="text-hint">No ratings yet</span>;
   }
   return (
     <span>
@@ -430,8 +430,8 @@ function Timeline({ status }) {
           aria-current={index === current ? "step" : undefined}
           className={cn(
             index === current && "font-semibold",
-            index < current && "text-muted-foreground",
-            index > current && "text-muted-foreground/60",
+            index < current && "text-hint",
+            index > current && "text-hint/60",
           )}
         >
           {index > 0 && <span aria-hidden="true">→ </span>}
@@ -462,7 +462,7 @@ function EngagementCard({ engagement, title, children }) {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <table className="w-full text-left">
-          <thead className="border-b text-muted-foreground">
+          <thead className="border-b text-hint">
             <tr>
               <th className="py-1 pr-3 font-medium">Filing</th>
               <th className="py-1 pr-3 font-medium">Service</th>
@@ -478,7 +478,7 @@ function EngagementCard({ engagement, title, children }) {
                     : "Removed filing"}{" "}
                   {item.period_label}
                   {item.due_date && (
-                    <span className="text-muted-foreground"> · due {formatDate(item.due_date)}</span>
+                    <span className="text-hint"> · due {formatDate(item.due_date)}</span>
                   )}
                 </td>
                 <td className="py-1 pr-3">{item.service_name}</td>

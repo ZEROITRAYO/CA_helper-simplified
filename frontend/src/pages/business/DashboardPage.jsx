@@ -119,7 +119,7 @@ function ToDo({ filings, engagements }) {
     <section className="space-y-2">
       <h2 className="text-lg font-semibold">To do</h2>
       {tasks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing to do right now.</p>
+        <p className="text-sm text-hint">Nothing to do right now.</p>
       ) : (
         <ul className="space-y-1 text-sm">
           {tasks.map((task) => (

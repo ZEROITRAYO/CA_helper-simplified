@@ -94,7 +94,7 @@ function UploadCard() {
           <Button type="submit" disabled={busy}>
             {busy ? "Uploading..." : "Upload"}
           </Button>
-          {done && <p className="text-sm text-muted-foreground">{done}</p>}
+          {done && <p className="text-sm text-hint">{done}</p>}
           <ErrorText>{error}</ErrorText>
         </div>
         {warning && (
@@ -109,7 +109,7 @@ function UploadCard() {
 
 function DocumentTable({ result, page, onPage }) {
   if (result.items.length === 0) {
-    return <p className="text-sm text-muted-foreground">No documents here yet.</p>;
+    return <p className="text-sm text-hint">No documents here yet.</p>;
   }
   const actions = <span className="sr-only">Actions</span>;
   return (

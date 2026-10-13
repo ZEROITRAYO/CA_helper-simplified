@@ -160,7 +160,7 @@ function PendingCas() {
   const cas = useAdminCas("pending");
   if (!cas.isSuccess) return <QueryStatus query={cas} />;
   if (cas.data.length === 0) {
-    return <p className="text-sm text-muted-foreground">No CA is waiting for verification.</p>;
+    return <p className="text-sm text-hint">No CA is waiting for verification.</p>;
   }
   return (
     <Table headers={["CA", "Membership no.", "City", "Certificate", "Waiting since", ""]}>
@@ -170,7 +170,7 @@ function PendingCas() {
           cells={[
             <>
               {ca.full_name}
-              <div className="text-xs text-muted-foreground">{ca.email}</div>
+              <div className="text-xs text-hint">{ca.email}</div>
             </>,
             ca.membership_no,
             ca.city,
@@ -213,7 +213,7 @@ function AllUsers() {
       <QueryStatus query={users} />
       {users.isSuccess && (
         <>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-hint">
             {users.data.total === 1 ? "1 account" : `${users.data.total} accounts`}
           </p>
           <Table headers={["Name", "Email", "Role", "Email verified", "Joined"]}>
@@ -284,7 +284,7 @@ function Details({ ca }) {
         <dl className="divide-y text-sm">
           {rows.map(([name, value]) => (
             <div key={name} className="grid gap-1 py-2 sm:grid-cols-3">
-              <dt className="text-muted-foreground">{name}</dt>
+              <dt className="text-hint">{name}</dt>
               <dd className="sm:col-span-2">{value}</dd>
             </div>
           ))}
@@ -317,7 +317,7 @@ function Certificate({ ca }) {
               Open the certificate
             </a>
           ) : (
-            !file.isError && <span className="text-muted-foreground">Loading the certificate...</span>
+            !file.isError && <span className="text-hint">Loading the certificate...</span>
           )}
         </>
       )}

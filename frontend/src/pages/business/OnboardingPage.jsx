@@ -286,7 +286,7 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
               ))}
             </Select>
             {business?.state_needs_review && !errors.state && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-hint">
                 You typed "{business.state}" before this list existed: please choose it again.
               </p>
             )}
@@ -321,7 +321,7 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
               text="Our accounts are audited under another law (for example the LLP Act or our partnership deed)"
               {...form.register("accounts_audited_other_law")}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-hint">
               LLPs above certain limits, and firms whose deed requires it, have their accounts
               audited every year. Ask your CA if you are not sure. An audit moves the income tax
               return's due date.
@@ -359,7 +359,7 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
                       {...form.register("gst_returns")}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-hint">
                     Quarterly returns (QRMP) are allowed up to a turnover limit; above it, returns
                     are monthly and your profile will say so.
                   </p>
@@ -444,7 +444,7 @@ function FillFromDocument({ setValue, onFilled }) {
         disabled={busy}
         onChange={onFile}
       />
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-hint">
         {busy
           ? "Reading the file..."
           : "The file is read on our server and not kept. Nothing is saved until you register."}
@@ -537,12 +537,12 @@ function ProfileView({ business, profile, nicCode, onEdit }) {
         </p>
       )}
       {profile.roc_not_tracked && (
-        <p className="rounded-lg bg-muted p-3 text-sm">{profile.explanations.roc_not_tracked}</p>
+        <p className="rounded-lg bg-soft p-3 text-sm">{profile.explanations.roc_not_tracked}</p>
       )}
 
       <NicCodeCard nicCode={nicCode} />
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-hint">
         The legal limits behind this profile are still being verified. Check with a CA before
         relying on it.
       </p>
@@ -668,7 +668,7 @@ export function NicCodeCard({ nicCode }) {
           </fieldset>
         )}
         {search.trim().length >= 2 && results.data && rows.length === 0 && (
-          <p className="text-sm text-muted-foreground">No code found.</p>
+          <p className="text-sm text-hint">No code found.</p>
         )}
       </div>
 

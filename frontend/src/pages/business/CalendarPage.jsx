@@ -33,7 +33,7 @@ export function CompliancePage() {
     content = <RegisterFirst>to see which filings apply to you and when they are due.</RegisterFirst>;
   } else if (filings.data.length === 0) {
     content = (
-      <p className="text-sm text-muted-foreground">No filings due for the rest of this year.</p>
+      <p className="text-sm text-hint">No filings due for the rest of this year.</p>
     );
   } else {
     const forms = FORM_FILTERS[formFilter];
@@ -58,7 +58,7 @@ export function CompliancePage() {
           />
         </div>
         {shown.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No filings match these filters.</p>
+          <p className="text-sm text-hint">No filings match these filters.</p>
         ) : (
           <FilingSections filings={shown} />
         )}
@@ -78,7 +78,7 @@ export function CompliancePage() {
 function Chips({ name, options, value, onChange }) {
   return (
     <div role="group" aria-label={name} className="flex flex-wrap items-center gap-1">
-      <span className="text-sm text-muted-foreground">{name}:</span>
+      <span className="text-sm text-hint">{name}:</span>
       {options.map((option) => (
         <button
           key={option}
@@ -88,8 +88,8 @@ function Chips({ name, options, value, onChange }) {
           className={
             "rounded-full border px-3 py-0.5 text-sm " +
             (value === option
-              ? "border-primary bg-primary text-primary-foreground"
-              : "hover:bg-muted")
+              ? "border-primary bg-primary text-white"
+              : "hover:bg-soft")
           }
         >
           {option}
@@ -116,7 +116,7 @@ function FilingSections({ filings }) {
       {earlier.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-lg font-semibold">Earlier this year: due dates already passed</h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-hint">
             If you already filed this, you'll be able to mark it as filed.
           </p>
           <FilingTable filings={earlier} />

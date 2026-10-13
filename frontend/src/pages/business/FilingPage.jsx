@@ -103,7 +103,7 @@ function Header({ page }) {
         {filingFormLabel(item.form_code, item.period_label)} · {item.period_label}
         <StatusBadge status={item.status} />
       </h1>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-hint">
         {page.form_name} · due {formatDate(item.due_date)}
         {!FILED.includes(item.status) && ` · ${daysLeftText(item.due_date)}`}
       </p>
@@ -142,7 +142,7 @@ function Penalty({ item }) {
             <p className="font-medium">Total: {formatRupees(estimate.data.total)}</p>
           )}
           {estimate.data.notes.map((note) => (
-            <p key={note} className="text-muted-foreground">
+            <p key={note} className="text-hint">
               {note}
             </p>
           ))}
@@ -329,13 +329,13 @@ function Filed({ page, onUpdated }) {
       contentClassName="space-y-3 text-sm"
     >
       {acknowledgement === null ? (
-        <p className="text-muted-foreground">No acknowledgement file was uploaded.</p>
+        <p className="text-hint">No acknowledgement file was uploaded.</p>
       ) : url ? (
         <a href={url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
           Open the acknowledgement ({acknowledgement.filename})
         </a>
       ) : (
-        <p className="text-muted-foreground">Loading the acknowledgement...</p>
+        <p className="text-hint">Loading the acknowledgement...</p>
       )}
       {acknowledgement !== null && <Verification verification={acknowledgement.verification} />}
       {item.filing_path === "self" && (
@@ -412,8 +412,8 @@ function Checklist({ page, onUpdated }) {
             />
             <span>
               {entry.label}
-              {!entry.required && <span className="text-muted-foreground"> (if it applies)</span>}
-              {entry.help && <span className="block text-xs text-muted-foreground">{entry.help}</span>}
+              {!entry.required && <span className="text-hint"> (if it applies)</span>}
+              {entry.help && <span className="block text-xs text-hint">{entry.help}</span>}
             </span>
           </label>
           {documentsOf(entry.key, entry.label)}
@@ -615,7 +615,7 @@ function PeerInsights({ item }) {
 function PeerPath({ title, figures }) {
   return (
     <div className="rounded-lg border p-3">
-      <p className="text-muted-foreground">{title}</p>
+      <p className="text-hint">{title}</p>
       <p className="text-2xl font-semibold tabular-nums">{figures.share_pct ?? 0}%</p>
       <p>{figures.on_time_pct === null ? "No filings yet" : `${figures.on_time_pct}% of them on time`}</p>
     </div>
@@ -712,7 +712,7 @@ function Guide({ page }) {
               onClick={() => setTab(key)}
               className={
                 "rounded-full border px-3 py-1 text-sm " +
-                (tab === key ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")
+                (tab === key ? "border-primary bg-primary text-white" : "hover:bg-soft")
               }
             >
               {title}

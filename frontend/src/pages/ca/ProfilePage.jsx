@@ -198,7 +198,7 @@ function CertificateCard({ profile }) {
           </form>
           <ErrorText className="mt-2">{error}</ErrorText>
           {done && (
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-2 text-sm text-hint">
               Certificate uploaded. An admin will check it.
             </p>
           )}
@@ -221,12 +221,12 @@ function PreviewCard({ profile }) {
       <CardContent className="space-y-2 text-sm">
         <SpecializationBadges codes={profile.specializations} />
         <p>
-          <span className="text-muted-foreground">Languages: </span>
+          <span className="text-hint">Languages: </span>
           {labelList(CA_LANGUAGE_LABELS, profile.languages)}
         </p>
         {profile.about && <p>{profile.about}</p>}
         {profile.verification_status !== "verified" && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-hint">
             Businesses see this once an admin has verified you.
           </p>
         )}
@@ -336,7 +336,7 @@ function CheckboxGroup({ legend, labels, error, ...inputProps }) {
           </label>
         ))}
       </div>
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
+      {error && <p className="text-sm text-danger">{error.message}</p>}
     </fieldset>
   );
 }
@@ -448,7 +448,7 @@ function PriceMenu({ services, menu, profile }) {
   return (
     <form className="space-y-4" onSubmit={onSave} noValidate>
       {profile.verification_status !== "verified" && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-hint">
           Businesses see your prices once an admin has verified your profile.
         </p>
       )}
@@ -506,7 +506,7 @@ function SpecializationWarning({ services, rows, profile }) {
       <Button type="button" size="sm" variant="outline" onClick={onAdd} disabled={busy}>
         {busy ? "Adding..." : "Add to specializations"}
       </Button>
-      {error && <p className="text-destructive">{error}</p>}
+      {error && <p className="text-danger">{error}</p>}
     </div>
   );
 }
@@ -529,7 +529,7 @@ function ServiceRow({ service, row, error, onChange }) {
         />
         {service.name}
       </label>
-      <p className="text-xs text-muted-foreground">{service.description}</p>
+      <p className="text-xs text-hint">{service.description}</p>
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span>₹</span>
         <Input
@@ -546,7 +546,7 @@ function ServiceRow({ service, row, error, onChange }) {
         <span>{label(SERVICE_UNIT_LABELS, service.unit)}</span>
       </div>
       {error && (
-        <p id={id + "-error"} className="text-sm text-destructive">
+        <p id={id + "-error"} className="text-sm text-danger">
           {error}
         </p>
       )}

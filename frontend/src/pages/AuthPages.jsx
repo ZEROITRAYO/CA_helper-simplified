@@ -125,7 +125,7 @@ function ResendButton({ form, send, setMessage }) {
 /** A line under a form, e.g. "Already have an account? Log in". */
 function FooterLink({ text, to, children }) {
   return (
-    <p className="text-sm text-muted-foreground">
+    <p className="text-sm text-hint">
       {text && text + " "}
       <Link to={to} className={linkClass}>
         {children}
@@ -181,7 +181,7 @@ export function HomePage() {
     <div className="space-y-8">
       <div className="space-y-4">
         <h1 className="text-3xl font-semibold">CA Helper</h1>
-        <p className="text-muted-foreground">
+        <p className="text-hint">
           Know which filings apply to your business and when. File yourself or work with a fairly
           priced CA.
         </p>
@@ -205,9 +205,9 @@ export function HomePage() {
             key={audience.title}
             to={audience.to}
             state={audience.state}
-            className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="rounded-xl focus-visible:ring-3 focus-visible:ring-focus/50 focus-visible:outline-none"
           >
-            <Card className="h-full transition-colors hover:bg-muted/50">
+            <Card className="h-full transition-colors hover:bg-soft/50">
               <CardHeader>
                 <CardTitle>{audience.title}</CardTitle>
                 <CardDescription>{audience.text}</CardDescription>
@@ -278,7 +278,7 @@ export function LoginPage() {
           {...field(form, "password")}
         />
         {serverError && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-danger">
             {serverError}{" "}
             {unverifiedEmail && (
               <Link to="/verify-email" state={{ email: unverifiedEmail }} className={linkClass}>
@@ -366,7 +366,7 @@ export function SignupPage() {
               {label(USER_ROLE_LABELS, role)}
             </label>
           ))}
-          {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
+          {errors.role && <p className="text-sm text-danger">{errors.role.message}</p>}
         </fieldset>
         <NewPasswordFields form={form} />
         <div className="space-y-1">
@@ -380,7 +380,7 @@ export function SignupPage() {
             </span>
           </label>
           {errors.terms_accepted && (
-            <p className="text-sm text-destructive">{errors.terms_accepted.message}</p>
+            <p className="text-sm text-danger">{errors.terms_accepted.message}</p>
           )}
         </div>
         <ErrorText>{serverError}</ErrorText>
