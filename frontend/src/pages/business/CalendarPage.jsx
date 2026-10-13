@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { useFilings } from "@/api";
-import { QueryStatus, StatusBadge } from "@/components/shared";
+import { QueryStatus, RegisterFirst, Row, StatusBadge, Table } from "@/components/shared";
+import { linkClass } from "@/components/ui";
 import { daysLeftText, daysUntil, filingFormLabel, formatDate, monthLabel } from "@/lib";
 
 // The filter chips: which forms each one keeps.
@@ -29,17 +30,10 @@ export function CompliancePage() {
   if (!filings.isSuccess) {
     content = <QueryStatus query={filings} />;
   } else if (filings.data === null) {
-    content = (
-      <p className="text-sm">
-        <Link to="/business/onboarding" className="underline">
-          Register your business
-        </Link>{" "}
-        to see which filings apply to you and when they are due.
-      </p>
-    );
+    content = <RegisterFirst>to see which filings apply to you and when they are due.</RegisterFirst>;
   } else if (filings.data.length === 0) {
     content = (
-      <p className="text-sm text-muted-foreground">No filings due for the rest of this year.</p>
+      <p className="text-sm text-hint">No filings due for the rest of this year.</p>
     );
   } else {
     const forms = FORM_FILTERS[formFilter];
@@ -64,7 +58,7 @@ export function CompliancePage() {
           />
         </div>
         {shown.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No filings match these filters.</p>
+          <p className="text-sm text-hint">No filings match these filters.</p>
         ) : (
           <FilingSections filings={shown} />
         )}
@@ -84,7 +78,7 @@ export function CompliancePage() {
 function Chips({ name, options, value, onChange }) {
   return (
     <div role="group" aria-label={name} className="flex flex-wrap items-center gap-1">
-      <span className="text-sm text-muted-foreground">{name}:</span>
+      <span className="text-sm text-hint">{name}:</span>
       {options.map((option) => (
         <button
           key={option}
@@ -94,8 +88,8 @@ function Chips({ name, options, value, onChange }) {
           className={
             "rounded-full border px-3 py-0.5 text-sm " +
             (value === option
-              ? "border-primary bg-primary text-primary-foreground"
-              : "hover:bg-muted")
+              ? "border-primary bg-primary text-white"
+              : "hover:bg-soft")
           }
         >
           {option}
@@ -112,7 +106,7 @@ function FilingSections({ filings }) {
   for (const item of filings) {
     if (daysUntil(item.due_date) >= 0) {
       const month = monthLabel(item.due_date);
-      byMonth[month] = byMonth[month] || [];
+      byMonth[month] ??= [];
       byMonth[month].push(item);
     }
   }
@@ -122,7 +116,7 @@ function FilingSections({ filings }) {
       {earlier.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-lg font-semibold">Earlier this year: due dates already passed</h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-hint">
             If you already filed this, you'll be able to mark it as filed.
           </p>
           <FilingTable filings={earlier} />
@@ -140,40 +134,23 @@ function FilingSections({ filings }) {
 
 function FilingTable({ filings }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b text-muted-foreground">
-          <tr>
-            <th className="py-2 pr-4 font-medium">Form</th>
-            <th className="py-2 pr-4 font-medium">Period</th>
-            <th className="py-2 pr-4 font-medium">Due date</th>
-            <th className="py-2 pr-4 font-medium">Days left</th>
-            <th className="py-2 font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filings.map((item) => (
-            <tr key={item.id} className="border-b">
-              <td className="py-2 pr-4">
-                <Link
-                  to={`/business/compliance/${item.id}`}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  {filingFormLabel(item.form_code, item.period_label)}
-                </Link>
-              </td>
-              <td className="py-2 pr-4">{item.period_label}</td>
-              <td className="py-2 pr-4">{formatDate(item.due_date)}</td>
-              <td className="py-2 pr-4 tabular-nums">
-                {DONE.includes(item.status) ? "—" : daysLeftText(item.due_date)}
-              </td>
-              <td className="py-2">
-                <StatusBadge status={item.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table headers={["Form", "Period", "Due date", "Days left", "Status"]}>
+      {filings.map((item) => (
+        <Row
+          key={item.id}
+          cells={[
+            <Link to={`/business/compliance/${item.id}`} className={linkClass}>
+              {filingFormLabel(item.form_code, item.period_label)}
+            </Link>,
+            item.period_label,
+            formatDate(item.due_date),
+            <span className="tabular-nums">
+              {DONE.includes(item.status) ? "—" : daysLeftText(item.due_date)}
+            </span>,
+            <StatusBadge status={item.status} />,
+          ]}
+        />
+      ))}
+    </Table>
   );
 }

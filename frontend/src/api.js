@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 // --- client ------------------------------------------------------------------------------------
 
@@ -19,8 +19,7 @@ import { useQuery } from "@tanstack/react-query";
  * - A request with no answer after REQUEST_TIMEOUT_MS fails with code TIMEOUT, so a
  *   hung server shows a clear message instead of a page that never finishes.
  *
- * Usage, in the hooks below:
- *   queryFn: () => apiFetch("/api/v1/<module>/<resource>"),
+ * The hooks below use it through useGet(), post(), put() and sendForm().
  */
 
 /** A failed API call: switch on `code` (e.g. INVALID_CREDENTIALS) and show `message`. */
@@ -78,8 +77,22 @@ export async function apiFetch(path, { method = "GET", body } = {}) {
     );
   }
   if (response.ok) return data;
+  fail(response, data, headers.Authorization);
+}
 
-  if (response.status === 401 && headers.Authorization) logout();
+/** Download a file the API sends as a Blob; errors throw ApiRequestError like apiFetch(). */
+export async function apiDownload(path) {
+  const hadToken = Boolean(accessToken);
+  const response = await fetch(path, {
+    headers: hadToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+  if (response.ok) return response.blob();
+  fail(response, await response.json().catch(() => null), hadToken);
+}
+
+// Throws the ApiRequestError of a failed response; a 401 to a request with a token logs out.
+function fail(response, data, hadToken) {
+  if (response.status === 401 && hadToken) logout();
   const error = data?.error; // the standard error body: {error: {code, message}}
   throw new ApiRequestError(
     response.status,
@@ -88,25 +101,66 @@ export async function apiFetch(path, { method = "GET", body } = {}) {
   );
 }
 
-/** Download a file the API sends as a Blob; errors throw ApiRequestError like apiFetch(). */
-export async function apiDownload(path) {
-  const response = await fetch(path, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-  });
-  if (response.ok) return response.blob();
-  const data = await response.json().catch(() => null);
-  if (response.status === 401 && accessToken) logout();
-  throw new ApiRequestError(
-    response.status,
-    data?.error?.code ?? "HTTP_ERROR",
-    data?.error?.message ?? `The server answered ${response.status}.`,
-  );
-}
-
 /** Text to show for any error thrown by a query: the API's message, or a network hint. */
 export function errorMessage(error) {
   if (error instanceof ApiRequestError) return error.message;
   return "Cannot reach the server. Check your connection and try again.";
+}
+
+
+// --- Helpers for the calls below ---------------------------------------------------------------
+
+// A GET. With `notFound` (an error code), that error answers null instead, e.g. for a
+// business that has not registered yet.
+async function get(path, notFound) {
+  try {
+    return await apiFetch(path);
+  } catch (error) {
+    if (notFound && error.code === notFound) return null;
+    throw error;
+  }
+}
+
+// A GET as a cached query: useGet(KEY, "/api/v1/...", { notFound, enabled, ... }).
+function useGet(queryKey, path, { notFound, ...options } = {}) {
+  return useQuery({ queryKey, queryFn: () => get(path, notFound), ...options });
+}
+
+function post(path, body) {
+  return apiFetch(path, { method: "POST", body });
+}
+
+function put(path, body) {
+  return apiFetch(path, { method: "PUT", body });
+}
+
+function remove(path) {
+  return apiFetch(path, { method: "DELETE" });
+}
+
+// POST a file upload: every field that has a value (a File or text) goes in the form.
+function sendForm(path, fields) {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) {
+    if (value) form.append(name, value);
+  }
+  return post(path, form);
+}
+
+// path?name=value&... without the empty values ("", null or undefined).
+function withQuery(path, params) {
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) {
+    if (value !== "" && value !== null && value !== undefined) query.set(name, value);
+  }
+  const text = query.toString();
+  return text ? path + "?" + text : path;
+}
+
+/** refresh(KEY, OTHER_KEY, ...): load these cached queries again, after a change. */
+export function useRefresh() {
+  const queryClient = useQueryClient();
+  return (...keys) => keys.forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
 }
 
 // --- health ------------------------------------------------------------------------------------
@@ -126,210 +180,128 @@ export function useHealth() {
 
 // --- auth --------------------------------------------------------------------------------------
 
-function post(path, body) {
-  return apiFetch(path, { method: "POST", body });
-}
-
-/** POST /api/v1/auth/signup {full_name, email, password, role} -> the new (unverified) user */
+/** The new (unverified) user. Signing up is only possible after ticking "I agree to the Terms". */
 export function signup({ full_name, email, password, role }) {
-  // Signing up is only possible after ticking "I agree to the Terms and Privacy Policy".
   return post("/api/v1/auth/signup", { full_name, email, password, role, terms_accepted: true });
 }
 
-/** POST /api/v1/auth/verify-email: the 6-digit code emailed at signup */
+/** The 6-digit code emailed at signup. */
 export function verifyEmail(email, code) {
   return post("/api/v1/auth/verify-email", { email, code });
 }
 
-/** POST /api/v1/auth/verify-email/resend: emails a new code */
 export function resendVerificationCode(email) {
   return post("/api/v1/auth/verify-email/resend", { email });
 }
 
-/** POST /api/v1/auth/forgot-password: emails a reset code */
+/** Emails a reset code. */
 export function forgotPassword(email) {
   return post("/api/v1/auth/forgot-password", { email });
 }
 
-/** POST /api/v1/auth/reset-password: sets a new password with the emailed code */
 export function resetPassword(email, code, newPassword) {
   return post("/api/v1/auth/reset-password", { email, code, new_password: newPassword });
 }
 
-/** POST /api/v1/auth/change-password: for the logged-in user */
-export function changePassword(currentPassword, newPassword) {
-  return post("/api/v1/auth/change-password", {
-    current_password: currentPassword,
-    new_password: newPassword,
-  });
-}
 
 export const SETTINGS_KEY = ["auth", "settings"];
 
-/** GET /api/v1/auth/settings: { email_notifications } */
+/** { email_notifications } */
 export function useSettings() {
-  return useQuery({
-    queryKey: SETTINGS_KEY,
-    queryFn: () => apiFetch("/api/v1/auth/settings"),
-  });
+  return useGet(SETTINGS_KEY, "/api/v1/auth/settings");
 }
 
-/** PUT /api/v1/auth/settings: switch the notification emails on or off; returns the settings */
+/** Switch the notification emails on or off; returns the settings. */
 export function saveSettings(emailNotifications) {
-  return apiFetch("/api/v1/auth/settings", {
-    method: "PUT",
-    body: { email_notifications: emailNotifications },
-  });
+  return put("/api/v1/auth/settings", { email_notifications: emailNotifications });
 }
 
 // --- onboarding --------------------------------------------------------------------------------
 
-// Name of the business in the query cache. OnboardingPage fills it after registering.
 export const MY_BUSINESS_KEY = ["onboarding", "business"];
 
-// Asks the backend for the logged-in user's business and its regulatory profile:
-// { business, profile }. Returns null if the business is not registered yet (404).
-async function fetchMyBusiness() {
-  try {
-    return await apiFetch("/api/v1/onboarding/business");
-  } catch (error) {
-    if (error.code === "BUSINESS_NOT_FOUND") {
-      return null;
-    }
-    throw error;
-  }
-}
-
-// Used by OnboardingPage.
+/** { business, profile, nic_code }, or null before the business is registered. */
 export function useMyBusiness() {
-  return useQuery({ queryKey: MY_BUSINESS_KEY, queryFn: fetchMyBusiness });
+  return useGet(MY_BUSINESS_KEY, "/api/v1/onboarding/business", { notFound: "BUSINESS_NOT_FOUND" });
 }
 
-// Registers the business (once). The backend also works out the regulatory profile
-// and creates the filings. Returns { business, profile }.
+/** Registers the business (once); the backend works out the profile and makes the filings. */
 export function registerBusiness(form) {
-  return apiFetch("/api/v1/onboarding/business", { method: "POST", body: form });
+  return post("/api/v1/onboarding/business", form);
 }
 
-// Edits the business. The backend recomputes the profile and syncs this year's filings.
-// Returns { business, profile, changes: { profile: [{line, old, new}], filings: {...} } }.
+/** Edits the business; the answer also has changes: { profile: [{line, old, new}], filings }. */
 export function updateBusiness(form) {
-  return apiFetch("/api/v1/onboarding/business", { method: "PUT", body: form });
+  return put("/api/v1/onboarding/business", form);
 }
 
-// Searches the official NIC list by code or words (for choosing a code by hand).
-// Only runs once at least 2 characters are typed.
+/** Searches the NIC list by code or words, once at least 2 characters are typed. */
 export function useNicSearch(query) {
   const text = query.trim();
-  return useQuery({
-    queryKey: ["onboarding", "nic-codes", text],
-    queryFn: () => apiFetch("/api/v1/onboarding/nic-codes?q=" + encodeURIComponent(text)),
-    enabled: text.length >= 2,
-  });
+  const path = "/api/v1/onboarding/nic-codes?q=" + encodeURIComponent(text);
+  return useGet(["onboarding", "nic-codes", text], path, { enabled: text.length >= 2 });
 }
 
-// Saves the NIC code the user confirmed. Returns { code, description }.
+/** Returns { code, description }. */
 export function saveNicCode(code) {
-  return apiFetch("/api/v1/onboarding/business/nic-code", { method: "PUT", body: { code } });
+  return put("/api/v1/onboarding/business/nic-code", { code });
 }
 
-// The states and union territories with their GST codes, for the form's dropdown.
+/** The states with their GST codes; reference data, so it is loaded once. */
 export function useGstStates() {
-  return useQuery({
-    queryKey: ["onboarding", "states"],
-    queryFn: () => apiFetch("/api/v1/onboarding/states"),
-    staleTime: Infinity, // reference data: it does not change while the app is open
-  });
+  return useGet(["onboarding", "states"], "/api/v1/onboarding/states", { staleTime: Infinity });
 }
 
-// Reads a GST certificate or PAN card on the server (locally, never stored) and
-// returns what it found: { found: { pan?, gstin?, legal_name?, state?, entity_type? } }.
+/** Reads a GST certificate or PAN card (not stored): { found: { pan?, gstin?, ... } }. */
 export function readRegistrationDocument(file) {
-  const form = new FormData();
-  form.append("file", file);
-  return apiFetch("/api/v1/onboarding/autofill", { method: "POST", body: form });
+  return sendForm("/api/v1/onboarding/autofill", { file });
 }
 
 // --- compliance --------------------------------------------------------------------------------
 
-// Name of the filings list in the query cache. OnboardingPage refreshes it after registering.
 export const FILINGS_KEY = ["compliance", "items"];
+export const DASHBOARD_KEY = ["compliance", "dashboard"];
 
-/** GET /api/v1/compliance/dashboard */
 export function useComplianceDashboard() {
-  return useQuery({
-    queryKey: ["compliance", "dashboard"],
-    queryFn: () => apiFetch("/api/v1/compliance/dashboard"),
-  });
+  return useGet(DASHBOARD_KEY, "/api/v1/compliance/dashboard");
 }
 
-// The business's filings, soonest due first.
-// Returns null if the business is not registered yet (the backend answers 404).
-async function fetchFilings() {
-  try {
-    return await apiFetch("/api/v1/compliance/items");
-  } catch (error) {
-    if (error.code === "BUSINESS_NOT_FOUND") {
-      return null;
-    }
-    throw error;
-  }
-}
-
-// Used by CompliancePage.
+/** The business's filings, soonest due first; null before the business is registered. */
 export function useFilings() {
-  return useQuery({ queryKey: FILINGS_KEY, queryFn: fetchFilings });
+  return useGet(FILINGS_KEY, "/api/v1/compliance/items", { notFound: "BUSINESS_NOT_FOUND" });
 }
 
-// --- One filing's page ---------------------------------------------------------------------
-
-// Name of one filing in the query cache. The actions below return the updated filing,
-// and FilingPage puts it there.
+/** One filing in the cache; the actions below return the updated filing for it. */
 export function filingKey(itemId) {
   return ["compliance", "item", itemId];
 }
 
-// { filing, form_name, content_status, explanation, instructions, checklist, acknowledgement }
+/** { filing, form_name, content_status, explanation, instructions, checklist, acknowledgement } */
 export function useFiling(itemId) {
-  return useQuery({
-    queryKey: filingKey(itemId),
-    queryFn: () => apiFetch("/api/v1/compliance/items/" + itemId),
-  });
+  return useGet(filingKey(itemId), "/api/v1/compliance/items/" + itemId);
 }
 
-// path is "self" (file it myself) or "ca" (with a CA).
+/** path is "self" (file it myself) or "ca" (with a CA). */
 export function chooseFilingPath(itemId, path) {
-  return apiFetch("/api/v1/compliance/items/" + itemId + "/path", {
-    method: "POST",
-    body: { path },
-  });
+  return post("/api/v1/compliance/items/" + itemId + "/path", { path });
 }
 
-// Tick (ticked = true) or untick one document of the checklist.
 export function tickChecklist(itemId, key, ticked) {
-  return apiFetch("/api/v1/compliance/items/" + itemId + "/checklist", {
-    method: "POST",
-    body: { key, ticked },
-  });
+  return post("/api/v1/compliance/items/" + itemId + "/checklist", { key, ticked });
 }
 
-// "I filed it myself". Both the ARN and the file are optional.
+/** "I filed it myself". Both the ARN and the file are optional. */
 export function markFiled(itemId, acknowledgementNo, file) {
-  const form = new FormData();
-  if (acknowledgementNo) form.append("acknowledgement_no", acknowledgementNo);
-  if (file) form.append("file", file);
-  return apiFetch("/api/v1/compliance/items/" + itemId + "/mark-filed", {
-    method: "POST",
-    body: form,
-  });
+  const path = "/api/v1/compliance/items/" + itemId + "/mark-filed";
+  return sendForm(path, { acknowledgement_no: acknowledgementNo, file });
 }
 
-// Undo a mistaken "mark as filed".
+/** Undo a mistaken "mark as filed". */
 export function unmarkFiled(itemId) {
-  return apiFetch("/api/v1/compliance/items/" + itemId + "/unmark-filed", { method: "POST" });
+  return post("/api/v1/compliance/items/" + itemId + "/unmark-filed");
 }
 
-// The uploaded acknowledgement file (a Blob), loaded only when there is one.
+/** The uploaded acknowledgement file (a Blob), loaded only when there is one. */
 export function useAcknowledgementFile(itemId, enabled) {
   return useQuery({
     queryKey: [...filingKey(itemId), "acknowledgement"],
@@ -338,12 +310,10 @@ export function useAcknowledgementFile(itemId, enabled) {
   });
 }
 
-/** GET /compliance/items/<id>/peer-insights: how similar businesses file this form. */
+/** How similar businesses file this form. */
 export function usePeerInsights(itemId) {
-  return useQuery({
-    queryKey: [...filingKey(itemId), "peers"],
-    queryFn: () => apiFetch("/api/v1/compliance/items/" + itemId + "/peer-insights"),
-  });
+  const path = "/api/v1/compliance/items/" + itemId + "/peer-insights";
+  return useGet([...filingKey(itemId), "peers"], path);
 }
 
 // --- documents ---------------------------------------------------------------------------------
@@ -362,56 +332,38 @@ export const UPLOAD_TYPES = [
   "other",
 ];
 
-// Every documents list in the query cache starts with this; refresh it after a change.
+// Every documents list in the cache starts with this; refresh it after a change.
 export const DOCUMENTS_KEY = ["documents"];
 
-// The query string of a list request, without the empty filters.
-function listPath(params) {
-  const query = new URLSearchParams();
-  for (const [name, value] of Object.entries(params)) {
-    if (value !== "" && value !== null && value !== undefined) query.set(name, value);
-  }
-  return "/api/v1/documents?" + query.toString();
-}
-
-/** GET /documents: { items, page, page_size, total }, newest first; optional filters. */
+/** { items, page, page_size, total }, newest first; params are the filters. */
 export function useDocuments(params, enabled = true) {
-  return useQuery({
-    queryKey: [...DOCUMENTS_KEY, params],
-    queryFn: () => apiFetch(listPath(params)),
-    enabled,
-  });
+  return useGet([...DOCUMENTS_KEY, params], withQuery("/api/v1/documents", params), { enabled });
 }
 
-/** Upload a file; only doc_type is needed, compliance_item_id also links it to a filing. */
+/** Only doc_type is needed; compliance_item_id (and checklist_key) also link it to a filing. */
 export function uploadDocument(file, fields) {
-  const form = new FormData();
-  form.append("file", file);
-  for (const [name, value] of Object.entries(fields)) {
-    if (value) form.append(name, value);
-  }
-  return apiFetch("/api/v1/documents", { method: "POST", body: form });
+  return sendForm("/api/v1/documents", { file, ...fields });
 }
 
-// Soft delete. Fails with DOCUMENT_IN_USE for the proof of a filed filing.
+/** Fails with DOCUMENT_IN_USE for the proof of a filed filing. */
 export function deleteDocument(documentId) {
-  return apiFetch("/api/v1/documents/" + documentId, { method: "DELETE" });
+  return remove("/api/v1/documents/" + documentId);
 }
 
-// Link a vault file to a filing's checklist entry ("general" for none); ticks the entry.
+/** Link a vault file to a filing's checklist entry ("general" for none); ticks the entry. */
 export function linkDocument(documentId, complianceItemId, checklistKey) {
-  return apiFetch("/api/v1/documents/" + documentId + "/links", {
-    method: "POST",
-    body: { compliance_item_id: complianceItemId, checklist_key: checklistKey },
+  return post("/api/v1/documents/" + documentId + "/links", {
+    compliance_item_id: complianceItemId,
+    checklist_key: checklistKey,
   });
 }
 
-// Remove one link (its id is in the document's `links`).
+/** Remove one link (its id is in the document's `links`). */
 export function unlinkDocument(linkId) {
-  return apiFetch("/api/v1/documents/links/" + linkId, { method: "DELETE" });
+  return remove("/api/v1/documents/links/" + linkId);
 }
 
-// Download the file and save it under its own name.
+/** Download the file and save it under its own name. */
 export async function downloadDocument(document) {
   const blob = await apiDownload("/api/v1/documents/" + document.id + "/file");
   const href = URL.createObjectURL(blob);
@@ -424,198 +376,113 @@ export async function downloadDocument(document) {
 
 // --- alerts ------------------------------------------------------------------------------------
 
-// Every notification page in the query cache; refreshed after one is read.
 export const NOTIFICATIONS_KEY = ["alerts", "notifications"];
 
-// One page of my notifications, newest first: { items, page, page_size, total }.
+/** One page of my notifications, newest first: { items, page, page_size, total }. */
 export function useNotifications(page) {
-  return useQuery({
-    queryKey: [...NOTIFICATIONS_KEY, page],
-    queryFn: () => apiFetch(`/api/v1/alerts/notifications?page=${page}`),
-  });
+  return useGet([...NOTIFICATIONS_KEY, page], `/api/v1/alerts/notifications?page=${page}`);
 }
 
 export function markNotificationRead(notificationId) {
-  return apiFetch(`/api/v1/alerts/notifications/${notificationId}/read`, { method: "POST" });
+  return post(`/api/v1/alerts/notifications/${notificationId}/read`);
 }
 
-// --- Penalty estimates ---------------------------------------------------------------------
-
-// One filing's estimate. taxDue ("" or an amount) adds the interest.
+/** One filing's late fee estimate; taxDue ("" or an amount) adds the interest. */
 export function usePenaltyEstimate(itemId, taxDue, enabled) {
   const query = taxDue ? `?tax_due=${encodeURIComponent(taxDue)}` : "";
-  return useQuery({
-    queryKey: ["alerts", "penalty", itemId, taxDue],
-    queryFn: () => apiFetch(`/api/v1/alerts/penalties/${itemId}${query}`),
-    enabled,
-  });
+  const path = `/api/v1/alerts/penalties/${itemId}${query}`;
+  return useGet(["alerts", "penalty", itemId, taxDue], path, { enabled });
 }
 
-// The late fees of all overdue filings, for the dashboard (only once registered).
+/** The late fees of all overdue filings, for the dashboard. */
 export function usePenaltyExposure(enabled) {
-  return useQuery({
-    queryKey: ["alerts", "penalties"],
-    queryFn: () => apiFetch("/api/v1/alerts/penalties"),
-    enabled,
-  });
+  return useGet(["alerts", "penalties"], "/api/v1/alerts/penalties", { enabled });
 }
 
 // --- marketplace -------------------------------------------------------------------------------
 
-// Name of the saved CA profile in the query cache. CaProfilePage updates it after a save.
 export const CA_PROFILE_KEY = ["marketplace", "ca-profile"];
 
-// Asks the backend for the logged-in CA's profile.
-// Returns null if the CA has not saved a profile yet (the backend answers 404).
-async function fetchCaProfile() {
-  try {
-    return await apiFetch("/api/v1/marketplace/ca-profile");
-  } catch (error) {
-    if (error.code === "CA_PROFILE_NOT_FOUND") {
-      return null;
-    }
-    throw error;
-  }
-}
-
-// Used by CaProfilePage and CaDashboardPage.
+/** The logged-in CA's profile, or null before they save one. */
 export function useCaProfile() {
-  return useQuery({ queryKey: CA_PROFILE_KEY, queryFn: fetchCaProfile });
+  const path = "/api/v1/marketplace/ca-profile";
+  return useGet(CA_PROFILE_KEY, path, { notFound: "CA_PROFILE_NOT_FOUND" });
 }
 
-// Saves the CA's profile form. Returns the saved profile.
+/** Returns the saved profile. */
 export function saveCaProfile(profile) {
-  return apiFetch("/api/v1/marketplace/ca-profile", { method: "PUT", body: profile });
+  return put("/api/v1/marketplace/ca-profile", profile);
 }
 
-// Uploads the Certificate of Practice (a PDF, JPG or PNG File). Returns the saved profile,
-// now waiting for an admin check.
+/** The Certificate of Practice; returns the profile, now waiting for an admin check. */
 export function uploadCertificate(file) {
-  const form = new FormData();
-  form.append("file", file);
-  return apiFetch("/api/v1/marketplace/ca-profile/certificate", { method: "POST", body: form });
+  return sendForm("/api/v1/marketplace/ca-profile/certificate", { file });
 }
 
-// The list of verified CAs for the "Find a CA" page.
-// filters = { specialization, language, city, service, page }; empty filters are not sent.
-// With a service chosen, each CA in the list has their `price` for it.
-export function useVerifiedCas(filters) {
-  const params = new URLSearchParams();
-  if (filters.specialization) params.set("specialization", filters.specialization);
-  if (filters.language) params.set("language", filters.language);
-  if (filters.city) params.set("city", filters.city);
-  if (filters.service) params.set("service", filters.service);
-  if (filters.page > 1) params.set("page", filters.page);
-
-  let url = "/api/v1/marketplace/cas";
-  if (params.toString()) {
-    url = url + "?" + params.toString();
-  }
-
-  return useQuery({
-    queryKey: ["marketplace", "cas", url],
-    queryFn: () => apiFetch(url),
+/** Verified CAs for "Find a CA"; with a service chosen, each has their `price` for it. */
+export function useVerifiedCas({ specialization, language, city, service, page }) {
+  const url = withQuery("/api/v1/marketplace/cas", {
+    specialization,
+    language,
+    city,
+    service,
+    page: page > 1 ? page : "",
   });
+  return useGet(["marketplace", "cas", url], url);
 }
 
-// One verified CA's page: details plus the services they offer, each with the CA's
-// fixed price. A CA businesses may not see answers 404 CA_NOT_FOUND.
+/** One verified CA with their services and prices (404 CA_NOT_FOUND for others). */
 export function useVerifiedCa(caId) {
-  return useQuery({
-    queryKey: ["marketplace", "ca", caId],
-    queryFn: () => apiFetch("/api/v1/marketplace/cas/" + caId),
-  });
+  return useGet(["marketplace", "ca", caId], "/api/v1/marketplace/cas/" + caId);
 }
 
-// Every catalog service. Used by the "Services & prices" and "Find a CA" pages.
+/** Every catalog service. */
 export function useServices() {
-  return useQuery({
-    queryKey: ["marketplace", "services"],
-    queryFn: () => apiFetch("/api/v1/marketplace/services"),
-  });
+  return useGet(["marketplace", "services"], "/api/v1/marketplace/services");
 }
 
-// Name of the CA's price menu in the query cache. CaServicesPage updates it after a save.
 export const CA_SERVICES_KEY = ["marketplace", "ca-services"];
 
-// The services the logged-in CA offers: { items: [{ service_id, price }] }.
+/** The services the logged-in CA offers: { items: [{ service_id, price }] }. */
 export function useCaServices() {
-  return useQuery({
-    queryKey: CA_SERVICES_KEY,
-    queryFn: () => apiFetch("/api/v1/marketplace/ca-services"),
-  });
+  return useGet(CA_SERVICES_KEY, "/api/v1/marketplace/ca-services");
 }
 
-// Saves the CA's whole price menu (it replaces the old one). Returns the saved menu.
+/** Saves the CA's whole price menu (it replaces the old one). */
 export function saveCaServices(items) {
-  return apiFetch("/api/v1/marketplace/ca-services", { method: "PUT", body: { items } });
+  return put("/api/v1/marketplace/ca-services", { items });
 }
 
 // --- Engagements (a business working with a CA) --------------------------------------------
 
-// Names in the query cache. Pages refresh them after an action.
 export const MY_ENGAGEMENTS_KEY = ["marketplace", "my-engagements"];
 export const CA_ENGAGEMENTS_KEY = ["marketplace", "ca-engagements"];
+export const REQUESTABLE_KEY = ["marketplace", "requestable-filings"];
 
-// The business's filings with this CA's prices, for the "Request this CA" page.
-// Returns null if the business is not registered yet (the backend answers 404).
-async function fetchRequestableFilings(caId) {
-  try {
-    return await apiFetch("/api/v1/marketplace/cas/" + caId + "/requestable-filings");
-  } catch (error) {
-    if (error.code === "BUSINESS_NOT_FOUND") {
-      return null;
-    }
-    throw error;
-  }
-}
-
+/** The business's filings with this CA's prices; null before the business is registered. */
 export function useRequestableFilings(caId) {
-  return useQuery({
-    queryKey: ["marketplace", "requestable-filings", caId],
-    queryFn: () => fetchRequestableFilings(caId),
-  });
+  const path = "/api/v1/marketplace/cas/" + caId + "/requestable-filings";
+  return useGet([...REQUESTABLE_KEY, caId], path, { notFound: "BUSINESS_NOT_FOUND" });
 }
 
-// Sends a request to a CA. items = [{ compliance_item_id, service_id }].
+/** items = [{ compliance_item_id, service_id }] */
 export function sendRequest(caId, items) {
-  return apiFetch("/api/v1/marketplace/engagements", {
-    method: "POST",
-    body: { ca_profile_id: caId, items },
-  });
+  return post("/api/v1/marketplace/engagements", { ca_profile_id: caId, items });
 }
 
-// The business's engagements, newest first. Null if the business is not registered yet.
-async function fetchMyEngagements() {
-  try {
-    return await apiFetch("/api/v1/marketplace/my-engagements");
-  } catch (error) {
-    if (error.code === "BUSINESS_NOT_FOUND") {
-      return null;
-    }
-    throw error;
-  }
-}
-
+/** The business's engagements, newest first; null before the business is registered. */
 export function useMyEngagements() {
-  return useQuery({ queryKey: MY_ENGAGEMENTS_KEY, queryFn: fetchMyEngagements });
+  const path = "/api/v1/marketplace/my-engagements";
+  return useGet(MY_ENGAGEMENTS_KEY, path, { notFound: "BUSINESS_NOT_FOUND" });
 }
 
-// The CA's engagements, newest first.
 export function useCaEngagements() {
-  return useQuery({
-    queryKey: CA_ENGAGEMENTS_KEY,
-    queryFn: () => apiFetch("/api/v1/marketplace/ca-engagements"),
-  });
+  return useGet(CA_ENGAGEMENTS_KEY, "/api/v1/marketplace/ca-engagements");
 }
 
-// One action on an engagement, e.g. engagementAction(id, "accept") or
-// engagementAction(id, "rating", { stars, review }). Returns the updated engagement.
+/** e.g. engagementAction(id, "accept") or (id, "rating", { stars, review }). */
 export function engagementAction(engagementId, action, body) {
-  return apiFetch("/api/v1/marketplace/engagements/" + engagementId + "/" + action, {
-    method: "POST",
-    body,
-  });
+  return post("/api/v1/marketplace/engagements/" + engagementId + "/" + action, body);
 }
 
 // --- caWorkspace -------------------------------------------------------------------------------
@@ -623,128 +490,90 @@ export function engagementAction(engagementId, action, body) {
 // Every ca_workspace query in the cache starts with this; refresh it after a change.
 export const CA_WORKSPACE_KEY = ["ca_workspace"];
 
-/** GET /api/v1/ca-workspace/dashboard */
 export function useCaDashboard() {
-  return useQuery({
-    queryKey: [...CA_WORKSPACE_KEY, "dashboard"],
-    queryFn: () => apiFetch("/api/v1/ca-workspace/dashboard"),
-  });
+  return useGet([...CA_WORKSPACE_KEY, "dashboard"], "/api/v1/ca-workspace/dashboard");
 }
 
-/** GET /ca-workspace/clients: the CA's clients, most urgent first, with their reasons. */
+/** The CA's clients, most urgent first, with their reasons. */
 export function useCaClients() {
-  return useQuery({
-    queryKey: [...CA_WORKSPACE_KEY, "clients"],
-    queryFn: () => apiFetch("/api/v1/ca-workspace/clients"),
-  });
+  return useGet([...CA_WORKSPACE_KEY, "clients"], "/api/v1/ca-workspace/clients");
 }
 
-/** GET /ca-workspace/clients/<id>: the business, its profile and the engaged filings. */
+/** The business, its profile and the engaged filings. */
 export function useCaClient(businessId) {
-  return useQuery({
-    queryKey: [...CA_WORKSPACE_KEY, "client", businessId],
-    queryFn: () => apiFetch("/api/v1/ca-workspace/clients/" + businessId),
-  });
+  const path = "/api/v1/ca-workspace/clients/" + businessId;
+  return useGet([...CA_WORKSPACE_KEY, "client", businessId], path);
 }
 
-/** GET /ca-workspace/batches: open filings across clients by form and due date. */
+/** Open filings across clients by form and due date. */
 export function useCaBatches() {
-  return useQuery({
-    queryKey: [...CA_WORKSPACE_KEY, "batches"],
-    queryFn: () => apiFetch("/api/v1/ca-workspace/batches"),
-  });
+  return useGet([...CA_WORKSPACE_KEY, "batches"], "/api/v1/ca-workspace/batches");
 }
 
-// The CA asks the client for a document for one filing ("general" for no checklist entry).
+/** The CA asks the client for a document for one filing ("general" for no checklist entry). */
 export function createDocumentRequest(businessId, complianceItemId, checklistKey, message) {
-  return apiFetch("/api/v1/ca-workspace/clients/" + businessId + "/document-requests", {
-    method: "POST",
-    body: { compliance_item_id: complianceItemId, checklist_key: checklistKey, message },
+  return post("/api/v1/ca-workspace/clients/" + businessId + "/document-requests", {
+    compliance_item_id: complianceItemId,
+    checklist_key: checklistKey,
+    message,
   });
 }
 
 export function cancelDocumentRequest(requestId) {
-  return apiFetch("/api/v1/ca-workspace/document-requests/" + requestId + "/cancel", {
-    method: "POST",
-  });
+  return post("/api/v1/ca-workspace/document-requests/" + requestId + "/cancel");
 }
 
-// The CA filed one filing. Both the ARN and the file are optional.
+/** The CA filed one filing. Both the ARN and the file are optional. */
 export function caMarkFiled(businessId, itemId, acknowledgementNo, file) {
-  const form = new FormData();
-  if (acknowledgementNo) form.append("acknowledgement_no", acknowledgementNo);
-  if (file) form.append("file", file);
-  return apiFetch(
-    "/api/v1/ca-workspace/clients/" + businessId + "/filings/" + itemId + "/mark-filed",
-    { method: "POST", body: form },
-  );
+  const path = "/api/v1/ca-workspace/clients/" + businessId + "/filings/" + itemId + "/mark-filed";
+  return sendForm(path, { acknowledgement_no: acknowledgementNo, file });
 }
 
-// --- The business side: its CAs' open requests (to-dos) ------------------------------------
-
-/** GET /ca-workspace/document-requests: the business's open requests, oldest first. */
+/** The business's open requests from its CAs (its to-dos), oldest first. */
 export function useMyDocumentRequests(itemId) {
   const query = itemId ? "?compliance_item_id=" + itemId : "";
-  return useQuery({
-    queryKey: [...CA_WORKSPACE_KEY, "my-requests", itemId ?? "all"],
-    queryFn: () => apiFetch("/api/v1/ca-workspace/document-requests" + query),
-  });
+  const path = "/api/v1/ca-workspace/document-requests" + query;
+  return useGet([...CA_WORKSPACE_KEY, "my-requests", itemId ?? "all"], path);
 }
 
-// Answer a request with a document already in the vault (upload it first if needed).
+/** Answer a request with a document already in the vault (upload it first if needed). */
 export function fulfilDocumentRequest(requestId, documentId) {
-  return apiFetch("/api/v1/ca-workspace/document-requests/" + requestId + "/fulfil", {
-    method: "POST",
-    body: { document_id: documentId },
-  });
+  const path = "/api/v1/ca-workspace/document-requests/" + requestId + "/fulfil";
+  return post(path, { document_id: documentId });
 }
 
 // --- admin -------------------------------------------------------------------------------------
 
-/** GET /api/v1/admin/dashboard */
-export function useAdminDashboard() {
-  return useQuery({
-    queryKey: ["admin", "dashboard"],
-    queryFn: () => apiFetch("/api/v1/admin/dashboard"),
-  });
-}
-
-// Names in the query cache; the CA review page refreshes them after a decision.
 export const ADMIN_CAS_KEY = ["admin", "cas"];
 export const ADMIN_STATS_KEY = ["admin", "stats"];
 
-/** GET /admin/stats: counts of users, CAs, engagements and filings, and the overdue rate. */
+export function useAdminDashboard() {
+  return useGet(["admin", "dashboard"], "/api/v1/admin/dashboard");
+}
+
+/** Counts of users, CAs, engagements and filings, and the overdue rate. */
 export function useAdminStats() {
-  return useQuery({
-    queryKey: ADMIN_STATS_KEY,
-    queryFn: () => apiFetch("/api/v1/admin/stats"),
-  });
+  return useGet(ADMIN_STATS_KEY, "/api/v1/admin/stats");
 }
 
-/** GET /api/v1/admin/users?role=&search=&page= (empty filters are not sent) */
+/** Every account; empty filters are not sent. */
 export function useAdminUsers({ role, search, page }) {
-  const params = new URLSearchParams();
-  if (role) params.set("role", role);
-  if (search) params.set("search", search);
-  if (page > 1) params.set("page", page);
-  const url = "/api/v1/admin/users" + (params.toString() ? "?" + params : "");
-  return useQuery({ queryKey: ["admin", "users", url], queryFn: () => apiFetch(url) });
+  const url = withQuery("/api/v1/admin/users", { role, search, page: page > 1 ? page : "" });
+  return useGet(["admin", "users", url], url);
 }
 
-/** GET /api/v1/admin/cas?status=pending: CA profiles, the longest-waiting first */
+/** CA profiles in one status, the longest-waiting first. */
 export function useAdminCas(status) {
-  return useQuery({
-    queryKey: [...ADMIN_CAS_KEY, status],
-    queryFn: () => apiFetch("/api/v1/admin/cas?status=" + status),
-  });
+  return useGet([...ADMIN_CAS_KEY, status], "/api/v1/admin/cas?status=" + status);
 }
 
-/** GET /api/v1/admin/cas/<id>: one CA with everything to check */
+export function adminCaKey(caId) {
+  return [...ADMIN_CAS_KEY, "one", caId];
+}
+
+/** One CA with everything to check. */
 export function useAdminCa(caId) {
-  return useQuery({
-    queryKey: [...ADMIN_CAS_KEY, "one", caId],
-    queryFn: () => apiFetch("/api/v1/admin/cas/" + caId),
-  });
+  return useGet(adminCaKey(caId), "/api/v1/admin/cas/" + caId);
 }
 
 /** The CA's Certificate of Practice file (a Blob), when they have uploaded one. */
@@ -757,9 +586,9 @@ export function useCertificateFile(caId, enabled) {
 }
 
 export function verifyCa(caId) {
-  return apiFetch("/api/v1/admin/cas/" + caId + "/verify", { method: "POST" });
+  return post("/api/v1/admin/cas/" + caId + "/verify");
 }
 
 export function rejectCa(caId, reason) {
-  return apiFetch("/api/v1/admin/cas/" + caId + "/reject", { method: "POST", body: { reason } });
+  return post("/api/v1/admin/cas/" + caId + "/reject", { reason });
 }

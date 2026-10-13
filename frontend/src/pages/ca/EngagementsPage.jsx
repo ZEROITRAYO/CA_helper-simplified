@@ -1,18 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-
-import { CA_ENGAGEMENTS_KEY, engagementAction, errorMessage, useCaEngagements } from "@/api";
-import { EngagementCard, QueryStatus } from "@/components/shared";
+import { CA_ENGAGEMENTS_KEY, engagementAction, useCaEngagements, useRefresh } from "@/api";
+import { EngagementGroups, ErrorText, QueryStatus, useAction } from "@/components/shared";
 import { Button } from "@/components/ui";
 
 // --- CaEngagementsPage -------------------------------------------------------------------------
-
-// The groups on the page, in order, and which statuses belong to each.
-const GROUPS = [
-  { title: "New requests", statuses: ["requested"] },
-  { title: "Active", statuses: ["active"] },
-  { title: "Finished", statuses: ["completed", "declined", "cancelled"] },
-];
 
 // /ca/engagements: every request businesses sent to this CA, grouped by status, with
 // the CA's actions (accept at the listed prices, decline, mark as completed).
@@ -28,79 +18,45 @@ export function CaEngagementsPage() {
           No requests yet. Businesses can find you in the marketplace once your profile is verified.
         </p>
       )}
-      {engagements.isSuccess &&
-        GROUPS.map((group) => {
-          const inGroup = engagements.data.filter((engagement) =>
-            group.statuses.includes(engagement.status),
-          );
-          if (inGroup.length === 0) {
-            return null;
-          }
-          return (
-            <section key={group.title} className="space-y-3">
-              <h2 className="text-lg font-semibold">{group.title}</h2>
-              {inGroup.map((engagement) => (
-                <EngagementCard
-                  key={engagement.id}
-                  engagement={engagement}
-                  title={engagement.business_name}
-                >
-                  <CaActions engagement={engagement} />
-                </EngagementCard>
-              ))}
-            </section>
-          );
-        })}
+      {engagements.isSuccess && (
+        <EngagementGroups
+          engagements={engagements.data}
+          waitingTitle="New requests"
+          titleOf={(engagement) => engagement.business_name}
+          actions={(engagement) => <CaActions engagement={engagement} />}
+        />
+      )}
     </div>
   );
 }
 
 // The buttons the CA has for one engagement.
 function CaActions({ engagement }) {
-  const queryClient = useQueryClient();
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const refresh = useRefresh();
+  const { busy, error, run } = useAction();
 
-  async function run(action) {
-    setError(null);
-    setBusy(true);
-    try {
-      await engagementAction(engagement.id, action);
-      queryClient.invalidateQueries({ queryKey: CA_ENGAGEMENTS_KEY });
-    } catch (actionError) {
-      setError(errorMessage(actionError));
-    }
-    setBusy(false);
-  }
-
-  let buttons = null;
-  if (engagement.status === "requested") {
-    buttons = (
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => run("accept")} disabled={busy}>
-          Accept at listed prices
-        </Button>
-        <Button variant="outline" onClick={() => run("decline")} disabled={busy}>
-          Decline
-        </Button>
-      </div>
-    );
-  } else if (engagement.status === "active") {
-    buttons = (
-      <Button onClick={() => run("complete")} disabled={busy}>
-        Mark as completed
-      </Button>
-    );
+  async function act(action) {
+    if (await run(() => engagementAction(engagement.id, action))) refresh(CA_ENGAGEMENTS_KEY);
   }
 
   return (
     <div className="space-y-2">
-      {buttons}
-      {error && (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
+      {engagement.status === "requested" && (
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => act("accept")} disabled={busy}>
+            Accept at listed prices
+          </Button>
+          <Button variant="outline" onClick={() => act("decline")} disabled={busy}>
+            Decline
+          </Button>
+        </div>
       )}
+      {engagement.status === "active" && (
+        <Button onClick={() => act("complete")} disabled={busy}>
+          Mark as completed
+        </Button>
+      )}
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }

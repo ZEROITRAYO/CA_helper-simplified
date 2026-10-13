@@ -1,0 +1,10 @@
+Hello {{ name }},
+
+{{ title }}
+
+{{ body }}
+
+You can also read it in CA Helper under "Notification settings",
+where you can choose which emails you get.
+
+CA Helper

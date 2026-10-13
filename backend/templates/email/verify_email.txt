@@ -1,0 +1,11 @@
+Hello {{ name }},
+
+Welcome to CA Helper. Your email verification OTP is:
+
+    {{ otp }}
+
+It expires in {{ minutes }} minutes. Enter it on the "Verify your email" page to finish signing up.
+
+If you did not create a CA Helper account, you can ignore this email.
+
+CA Helper

@@ -1,30 +1,17 @@
 import { Link } from "react-router";
 
-import { errorMessage, useCaDashboard, useCaProfile, useCaServices } from "@/api";
+import { useCaDashboard, useCaProfile, useCaServices } from "@/api";
+import { Welcome } from "@/components/shared";
 import { buttonClass, Card, CardDescription, CardHeader, CardTitle } from "@/components/ui";
 import { CA_VERIFICATION_STATUS_LABELS, label } from "@/lib";
 
-/** CA home dashboard. For now a welcome message; clients and urgency scores come later. */
+/** CA home dashboard: a welcome message and what is left before businesses can find them. */
 export function CaDashboardPage() {
   const dashboard = useCaDashboard();
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">
-        {dashboard.isPending
-          ? "Loading..."
-          : dashboard.isError
-            ? "Dashboard"
-            : dashboard.data.message}
-      </h1>
-      {dashboard.isError && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Could not load the dashboard</CardTitle>
-            <CardDescription>{errorMessage(dashboard.error)}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+      <Welcome query={dashboard} />
       <ProfileReminder />
     </div>
   );
@@ -53,11 +40,7 @@ function ProfileReminder() {
   const profile = useCaProfile();
   const menu = useCaServices();
   if (!profile.isSuccess) return null;
-  let status = "missing"; // no profile saved yet
-  if (profile.data) {
-    status = profile.data.verification_status;
-  }
-  const reminder = REMINDERS[status];
+  const reminder = REMINDERS[profile.data?.verification_status ?? "missing"];
   if (!reminder) return null; // verified
 
   return (
@@ -65,10 +48,7 @@ function ProfileReminder() {
       <CardHeader>
         <CardTitle>{reminder.title}</CardTitle>
         <CardDescription>{reminder.text}</CardDescription>
-        <SetupChecklist
-          profile={profile.data}
-          hasPrices={menu.isSuccess && menu.data.items.length > 0}
-        />
+        <SetupChecklist profile={profile.data} hasPrices={menu.data?.items.length > 0} />
         <div>
           <Link to="/ca/profile" className={buttonClass()}>{reminder.action}</Link>
         </div>
@@ -81,13 +61,10 @@ function ProfileReminder() {
 function SetupChecklist({ profile, hasPrices }) {
   const steps = [
     { name: "Profile", done: Boolean(profile) },
-    { name: "Certificate uploaded", done: Boolean(profile && profile.has_certificate) },
+    { name: "Certificate uploaded", done: Boolean(profile?.has_certificate) },
     { name: "Prices set", done: hasPrices },
   ];
-  let status = null;
-  if (profile) {
-    status = profile.verification_status;
-  }
+  const status = profile?.verification_status;
   return (
     <ul aria-label="Setup checklist" className="space-y-1 pt-2 text-sm">
       {steps.map((step) => (

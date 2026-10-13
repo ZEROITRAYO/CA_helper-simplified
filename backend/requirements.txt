@@ -9,7 +9,6 @@ Flask-JWT-Extended==4.7.4
 Flask-SQLAlchemy==3.1.1
 # SQLAlchemy is held at 2.0.x: Flask-SQLAlchemy 3.1.1 predates SQLAlchemy 2.1.
 SQLAlchemy==2.0.54
-Flask-Migrate==4.1.0
 psycopg[binary]==3.3.6
 
 # --- Security ---
@@ -25,9 +24,6 @@ PyYAML==6.0.3
 # Reads the text of PDFs and turns PDF pages into images for Tesseract (app/ocr.py).
 # The `tesseract` program itself is installed with apt (docker-compose.yml, CI).
 PyMuPDF==1.28.2
-
-# --- Background jobs (worker process only) ---
-APScheduler==3.11.3
 
 # --- Tests ---
 pytest==9.1.1

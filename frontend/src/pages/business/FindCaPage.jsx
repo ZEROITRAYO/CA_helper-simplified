@@ -1,19 +1,36 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 
 import {
-  errorMessage,
   MY_ENGAGEMENTS_KEY,
+  REQUESTABLE_KEY,
   sendRequest,
+  useRefresh,
   useRequestableFilings,
   useServices,
   useVerifiedCa,
   useVerifiedCas,
 } from "@/api";
-import { Pager, QueryStatus, RatingSummary, Stars } from "@/components/shared";
 import {
-  Badge,
+  BackLink,
+  caFacts,
+  ErrorText,
+  Field,
+  Options,
+  PageTitle,
+  Pager,
+  QueryStatus,
+  RatingSummary,
+  RegisterFirst,
+  Row,
+  Section,
+  SpecializationBadges,
+  Stars,
+  Table,
+  useAction,
+  VerifiedBadge,
+} from "@/components/shared";
+import {
   Button,
   buttonClass,
   Card,
@@ -22,7 +39,7 @@ import {
   CardHeader,
   CardTitle,
   Input,
-  Label,
+  Select,
 } from "@/components/ui";
 import {
   CA_LANGUAGE_LABELS,
@@ -32,47 +49,36 @@ import {
   formatDateTime,
   formatRupees,
   label,
+  labelList,
   SERVICE_UNIT_LABELS,
 } from "@/lib";
 
 // --- MarketplacePage ---------------------------------------------------------------------------
 
-const SELECT_CLASS =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+const FILTERS = ["service", "specialization", "language", "city"];
 
 /** /business/marketplace: verified CAs; the filters live in the URL (?service=...). */
 export function MarketplacePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = {
-    specialization: urlValue(searchParams, "specialization"),
-    language: urlValue(searchParams, "language"),
-    city: urlValue(searchParams, "city"),
-    service: urlValue(searchParams, "service"),
-    page: Number(urlValue(searchParams, "page") || 1),
+    specialization: searchParams.get("specialization") ?? "",
+    language: searchParams.get("language") ?? "",
+    city: searchParams.get("city") ?? "",
+    service: searchParams.get("service") ?? "",
+    page: Number(searchParams.get("page") || 1),
   };
   const cas = useVerifiedCas(filters);
   const services = useServices();
-
   // The catalog service picked in the "Service" filter, if any.
-  let chosenService = null;
-  if (services.isSuccess && filters.service) {
-    for (const service of services.data) {
-      if (service.code === filters.service) {
-        chosenService = service;
-      }
-    }
-  }
+  const chosenService = (services.data ?? []).find((service) => service.code === filters.service);
 
   /** Show `changes` (a new filter goes back to page 1); empty values leave the URL. */
   function show(changes) {
     const next = { ...filters, page: 1, ...changes };
     const params = {};
     for (const name in next) {
-      const value = next[name];
       // Leave out empty filters, and page 1 (the default).
-      if (value && !(name === "page" && value === 1)) {
-        params[name] = value;
-      }
+      if (next[name] && !(name === "page" && next[name] === 1)) params[name] = next[name];
     }
     setSearchParams(params);
   }
@@ -80,22 +86,12 @@ export function MarketplacePage() {
   function onSearch(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    show({
-      service: form.get("service"),
-      specialization: form.get("specialization"),
-      language: form.get("language"),
-      city: form.get("city"),
-    });
+    show(Object.fromEntries(FILTERS.map((name) => [name, form.get(name)])));
   }
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Find a CA</h1>
-        <p className="text-sm text-muted-foreground">
-          Every CA listed here has been verified by our team.
-        </p>
-      </div>
+      <PageTitle title="Find a CA">Every CA listed here has been verified by our team.</PageTitle>
 
       {/* key: the inputs show the URL's filters again after "Clear" or back/forward,
           and once the services have loaded (so the Service box can show its choice). */}
@@ -104,59 +100,29 @@ export function MarketplacePage() {
         className="grid gap-3 sm:grid-cols-2 sm:items-end lg:grid-cols-5"
         onSubmit={onSearch}
       >
-        <div className="space-y-2">
-          <Label htmlFor="service">Service</Label>
-          <select
-            id="service"
-            name="service"
-            defaultValue={filters.service}
-            className={SELECT_CLASS}
-          >
+        <Field id="service" label="Service">
+          <Select id="service" name="service" defaultValue={filters.service}>
             <option value="">Any</option>
-            {services.isSuccess &&
-              services.data.map((service) => (
-                <option key={service.id} value={service.code}>
-                  {service.name}
-                </option>
-              ))}
-          </select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="specialization">Specialization</Label>
-          <select
-            id="specialization"
-            name="specialization"
-            defaultValue={filters.specialization}
-            className={SELECT_CLASS}
-          >
-            <option value="">Any</option>
-            {Object.entries(CA_SPECIALIZATION_LABELS).map(([code, text]) => (
-              <option key={code} value={code}>
-                {text}
+            {(services.data ?? []).map((service) => (
+              <option key={service.id} value={service.code}>
+                {service.name}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="language">Language</Label>
-          <select
-            id="language"
-            name="language"
-            defaultValue={filters.language}
-            className={SELECT_CLASS}
-          >
-            <option value="">Any</option>
-            {Object.entries(CA_LANGUAGE_LABELS).map(([code, text]) => (
-              <option key={code} value={code}>
-                {text}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="city">City</Label>
+          </Select>
+        </Field>
+        <Field id="specialization" label="Specialization">
+          <Select id="specialization" name="specialization" defaultValue={filters.specialization}>
+            <Options labels={CA_SPECIALIZATION_LABELS} empty="Any" />
+          </Select>
+        </Field>
+        <Field id="language" label="Language">
+          <Select id="language" name="language" defaultValue={filters.language}>
+            <Options labels={CA_LANGUAGE_LABELS} empty="Any" />
+          </Select>
+        </Field>
+        <Field id="city" label="City">
           <Input id="city" name="city" defaultValue={filters.city} placeholder="Any" />
-        </div>
+        </Field>
         <div className="flex gap-2">
           <Button type="submit">Search</Button>
           <Button type="button" variant="outline" onClick={() => setSearchParams({})}>
@@ -168,7 +134,7 @@ export function MarketplacePage() {
       <QueryStatus query={cas} />
       {cas.isSuccess && (
         <>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-hint">
             {cas.data.total === 1 ? "1 CA found" : `${cas.data.total} CAs found`}
           </p>
           {cas.data.items.length === 0 ? (
@@ -189,53 +155,38 @@ export function MarketplacePage() {
   );
 }
 
-// The whole card is a link to the CA's page. `service` is the catalog service
-// chosen in the filter (or null); the card then shows this CA's price for it.
-// `search` is the current filters, handed to the CA's page so its "Back to
-// results" link keeps them.
+// The whole card is a link to the CA's page. `service` is the catalog service chosen in
+// the filter (or none); the card then shows this CA's price for it. `search` is the
+// current filters, handed to the CA's page so its "Back to results" link keeps them.
 function CaCard({ ca, service, search }) {
-  const detailLink = "/business/marketplace/" + ca.id;
-
-  let priceText = null;
-  if (service && ca.price !== null) {
-    priceText = formatRupees(ca.price) + " " + label(SERVICE_UNIT_LABELS, service.unit);
-  }
-
   return (
-    <Link to={detailLink} state={{ search }} className="block h-full">
+    <Link to={"/business/marketplace/" + ca.id} state={{ search }} className="block h-full">
       <Card className="h-full cursor-pointer transition hover:shadow-md hover:ring-2 hover:ring-primary/40">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <h2>{ca.full_name}</h2>
-            <Badge className="bg-green-100 text-green-700">Verified</Badge>
+            <VerifiedBadge />
             {ca.rating_count > 0 && (
               <span className="text-sm font-normal">
                 <RatingSummary average={ca.rating_average} count={ca.rating_count} />
               </span>
             )}
           </CardTitle>
-          <CardDescription>
-            {ca.city} · {ca.years_experience} {ca.years_experience === 1 ? "year" : "years"} of
-            experience · ICAI no. {ca.membership_no}
-          </CardDescription>
+          <CardDescription>{caFacts(ca)}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <div className="flex flex-wrap gap-1">
-            {ca.specializations.map((code) => (
-              <Badge key={code} variant="outline">
-                {label(CA_SPECIALIZATION_LABELS, code)}
-              </Badge>
-            ))}
-          </div>
+          <SpecializationBadges codes={ca.specializations} />
           <p>
-            <span className="text-muted-foreground">Languages: </span>
-            {ca.languages.map((code) => label(CA_LANGUAGE_LABELS, code)).join(", ")}
+            <span className="text-hint">Languages: </span>
+            {labelList(CA_LANGUAGE_LABELS, ca.languages)}
           </p>
           {ca.about && <p>{ca.about}</p>}
-          {priceText && (
+          {service && ca.price !== null && (
             <p>
-              <span className="text-muted-foreground">Fee for {service.name}: </span>
-              <span className="font-medium">{priceText}</span>
+              <span className="text-hint">Fee for {service.name}: </span>
+              <span className="font-medium">
+                {formatRupees(ca.price) + " " + label(SERVICE_UNIT_LABELS, service.unit)}
+              </span>
             </p>
           )}
         </CardContent>
@@ -244,35 +195,18 @@ function CaCard({ ca, service, search }) {
   );
 }
 
-// One filter from the URL (?city=pune), or "" when it is not there.
-function urlValue(searchParams, name) {
-  const value = searchParams.get(name);
-  if (value === null) {
-    return "";
-  }
-  return value;
-}
-
 // --- CaDetailPage ------------------------------------------------------------------------------
 
 // /business/marketplace/:caId: everything about one verified CA, opened from a card
 // on "Find a CA". The card passes its search (the filters) so "Back" keeps them.
 export function CaDetailPage() {
   const { caId } = useParams();
-  const location = useLocation();
+  const search = useLocation().state?.search;
   const ca = useVerifiedCa(caId);
-
-  let backLink = "/business/marketplace";
-  if (location.state && location.state.search) {
-    backLink = backLink + "?" + location.state.search;
-  }
 
   return (
     <div className="max-w-3xl space-y-6">
-      <Link to={backLink} className="text-sm text-primary underline-offset-4 hover:underline">
-        ← Back to results
-      </Link>
-
+      <BackLink to={"/business/marketplace" + (search ? "?" + search : "")}>Back to results</BackLink>
       <QueryStatus query={ca} />
       {ca.isSuccess && <CaDetails ca={ca.data} />}
     </div>
@@ -285,109 +219,68 @@ function CaDetails({ ca }) {
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold">{ca.full_name}</h1>
-          <Badge className="bg-green-100 text-green-700">Verified</Badge>
+          <VerifiedBadge />
         </div>
-        <p className="text-sm text-muted-foreground">
-          {ca.city} · {ca.years_experience} {ca.years_experience === 1 ? "year" : "years"} of
-          experience · ICAI no. {ca.membership_no}
-        </p>
+        <p className="text-sm text-hint">{caFacts(ca)}</p>
       </div>
 
       <Link to={"/business/marketplace/" + ca.id + "/request"} className={buttonClass()}>
         Request this CA
       </Link>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>About</CardTitle>
-          {ca.about ? (
-            <CardDescription>{ca.about}</CardDescription>
-          ) : (
-            <CardDescription>
-              This CA has not written anything about their practice.
-            </CardDescription>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="space-y-1">
-            <p className="font-medium">Specializations</p>
-            <div className="flex flex-wrap gap-1">
-              {ca.specializations.map((code) => (
-                <Badge key={code} variant="outline">
-                  {label(CA_SPECIALIZATION_LABELS, code)}
-                </Badge>
-              ))}
-            </div>
-          </div>
-          <p>
-            <span className="font-medium">Languages: </span>
-            {ca.languages.map((code) => label(CA_LANGUAGE_LABELS, code)).join(", ")}
-          </p>
-        </CardContent>
-      </Card>
+      <Section
+        title="About"
+        description={ca.about || "This CA has not written anything about their practice."}
+        contentClassName="space-y-3 text-sm"
+      >
+        <div className="space-y-1">
+          <p className="font-medium">Specializations</p>
+          <SpecializationBadges codes={ca.specializations} />
+        </div>
+        <p>
+          <span className="font-medium">Languages: </span>
+          {labelList(CA_LANGUAGE_LABELS, ca.languages)}
+        </p>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Services & fees</CardTitle>
-          <CardDescription>
-            The CA's fixed fee for each service.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {ca.services.length === 0 ? (
-            <p className="text-sm">This CA has not listed any prices yet.</p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="border-b text-muted-foreground">
-                <tr>
-                  <th className="py-2 pr-4 font-medium">Service</th>
-                  <th className="py-2 font-medium">Fee</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ca.services.map((service) => (
-                  <ServiceRow key={service.id} service={service} />
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Ratings</CardTitle>
-          <CardDescription>
-            <RatingSummary average={ca.rating_average} count={ca.rating_count} />
-          </CardDescription>
-        </CardHeader>
-        {ca.reviews && ca.reviews.length > 0 && (
-          <CardContent>
-            <ul className="space-y-3 text-sm">
-              {ca.reviews.map((review) => (
-                <li key={review.created_at}>
-                  <Stars stars={review.stars} />{" "}
-                  <span className="text-muted-foreground">{formatDateTime(review.created_at)}</span>
-                  {review.review && <p>{review.review}</p>}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
+      <Section title="Services & fees" description="The CA's fixed fee for each service.">
+        {ca.services.length === 0 ? (
+          <p className="text-sm">This CA has not listed any prices yet.</p>
+        ) : (
+          <Table headers={["Service", "Fee"]}>
+            {ca.services.map((service) => (
+              <Row
+                key={service.id}
+                cells={[
+                  service.name,
+                  <>
+                    <span className="font-medium">{formatRupees(service.price)}</span>{" "}
+                    {label(SERVICE_UNIT_LABELS, service.unit)}
+                  </>,
+                ]}
+              />
+            ))}
+          </Table>
         )}
-      </Card>
-    </>
-  );
-}
+      </Section>
 
-function ServiceRow({ service }) {
-  return (
-    <tr className="border-b align-top">
-      <td className="py-2 pr-4">{service.name}</td>
-      <td className="py-2">
-        <span className="font-medium">{formatRupees(service.price)}</span>{" "}
-        {label(SERVICE_UNIT_LABELS, service.unit)}
-      </td>
-    </tr>
+      <Section
+        title="Ratings"
+        description={<RatingSummary average={ca.rating_average} count={ca.rating_count} />}
+      >
+        {ca.reviews?.length > 0 && (
+          <ul className="space-y-3 text-sm">
+            {ca.reviews.map((review) => (
+              <li key={review.created_at}>
+                <Stars stars={review.stars} />{" "}
+                <span className="text-hint">{formatDateTime(review.created_at)}</span>
+                {review.review && <p>{review.review}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </>
   );
 }
 
@@ -400,47 +293,24 @@ export function RequestCaPage() {
   const ca = useVerifiedCa(caId);
   const filings = useRequestableFilings(caId);
 
-  let content;
-  if (ca.isPending || filings.isPending) {
-    content = <p className="text-sm text-muted-foreground">Loading...</p>;
-  } else if (ca.isError || filings.isError) {
-    content = (
-      <p role="alert" className="text-sm text-destructive">
-        {errorMessage(ca.error || filings.error)}
-      </p>
-    );
-  } else if (filings.data === null) {
-    content = (
-      <p className="text-sm">
-        <Link to="/business/onboarding" className="underline">
-          Register your business
-        </Link>{" "}
-        first, so we know which filings you have.
-      </p>
-    );
-  } else if (filings.data.length === 0) {
-    content = <p className="text-sm">You have no filings due for the rest of this year.</p>;
-  } else {
-    content = <RequestForm caId={caId} filings={filings.data} />;
+  let content = <QueryStatus query={[ca, filings]} />;
+  if (ca.isSuccess && filings.isSuccess) {
+    if (filings.data === null) {
+      content = <RegisterFirst>first, so we know which filings you have.</RegisterFirst>;
+    } else if (filings.data.length === 0) {
+      content = <p className="text-sm">You have no filings due for the rest of this year.</p>;
+    } else {
+      content = <RequestForm caId={caId} filings={filings.data} />;
+    }
   }
 
   return (
     <div className="max-w-3xl space-y-6">
-      <Link
-        to={"/business/marketplace/" + caId}
-        className="text-sm text-primary underline-offset-4 hover:underline"
-      >
-        ← Back to the CA
-      </Link>
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">
-          Request {ca.isSuccess ? ca.data.full_name : "this CA"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Tick the filings you want this CA to do. The CA can accept at these fixed prices or
-          decline.
-        </p>
-      </div>
+      <BackLink to={"/business/marketplace/" + caId}>Back to the CA</BackLink>
+      <PageTitle title={"Request " + (ca.isSuccess ? ca.data.full_name : "this CA")}>
+        Tick the filings you want this CA to do. The CA can accept at these fixed prices or
+        decline.
+      </PageTitle>
       {content}
     </div>
   );
@@ -448,21 +318,18 @@ export function RequestCaPage() {
 
 // The price of the chosen service of one filing.
 function priceOf(filing, serviceId) {
-  for (const option of filing.options) {
-    if (option.service_id === serviceId) {
-      return Number(option.price);
-    }
-  }
-  return 0;
+  const option = filing.options.find((one) => one.service_id === serviceId);
+  return option ? Number(option.price) : 0;
 }
 
 function RequestForm({ caId, filings }) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const refresh = useRefresh();
   // { filing id: the chosen service id } for every ticked filing.
   const [chosen, setChosen] = useState({});
-  const [error, setError] = useState(null);
-  const [sending, setSending] = useState(false);
+  const { busy, error, run } = useAction();
+  const ticked = filings.filter((filing) => chosen[filing.id]);
+  const total = ticked.reduce((sum, filing) => sum + priceOf(filing, chosen[filing.id]), 0);
 
   function toggle(filing) {
     const next = { ...chosen };
@@ -485,53 +352,18 @@ function RequestForm({ caId, filings }) {
     setChosen(next);
   }
 
-  function chooseService(filing, serviceId) {
-    setChosen({ ...chosen, [filing.id]: serviceId });
-  }
-
-  let total = 0;
-  for (const filing of filings) {
-    if (chosen[filing.id]) {
-      total = total + priceOf(filing, chosen[filing.id]);
-    }
-  }
-  const nothingTicked = Object.keys(chosen).length === 0;
-
   async function onSend() {
-    setError(null);
-    const items = [];
-    for (const filing of filings) {
-      if (chosen[filing.id]) {
-        items.push({ compliance_item_id: filing.id, service_id: chosen[filing.id] });
-      }
-    }
-    if (items.length === 0) {
-      return; // the button is disabled until a filing is ticked
-    }
-
-    setSending(true);
-    try {
-      await sendRequest(caId, items);
-      queryClient.invalidateQueries({ queryKey: MY_ENGAGEMENTS_KEY });
-      queryClient.invalidateQueries({ queryKey: ["marketplace", "requestable-filings"] });
+    const items = ticked.map((filing) => ({ compliance_item_id: filing.id, service_id: chosen[filing.id] }));
+    const sent = await run(() => sendRequest(caId, items));
+    if (sent) {
+      refresh(MY_ENGAGEMENTS_KEY, REQUESTABLE_KEY);
       navigate("/business/engagements", { state: { sent: true } });
-    } catch (sendError) {
-      setError(errorMessage(sendError));
-      setSending(false);
     }
   }
 
   // Filings this CA has not priced are listed apart, folded away.
-  const offered = [];
-  const notOffered = [];
-  for (const filing of filings) {
-    if (filing.options.length > 0) {
-      offered.push(filing);
-    } else {
-      notOffered.push(filing);
-    }
-  }
-  const quarters = groupByQuarter(offered);
+  const offered = filings.filter((filing) => filing.options.length > 0);
+  const notOffered = filings.filter((filing) => filing.options.length === 0);
 
   function filingRow(filing) {
     return (
@@ -546,17 +378,15 @@ function RequestForm({ caId, filings }) {
             onChange={() => toggle(filing)}
           />
           {filingFormLabel(filing.form_code, filing.period_label)} {filing.period_label}
-          <span className="font-normal text-muted-foreground">
-            · due {formatDate(filing.due_date)}
-          </span>
+          <span className="font-normal text-hint">· due {formatDate(filing.due_date)}</span>
         </label>
         {filing.blocked_reason ? (
-          <p className="mt-1 text-muted-foreground">{filing.blocked_reason}</p>
+          <p className="mt-1 text-hint">{filing.blocked_reason}</p>
         ) : (
           <FilingPrice
             filing={filing}
             serviceId={chosen[filing.id] || filing.options[0].service_id}
-            onChoose={(serviceId) => chooseService(filing, serviceId)}
+            onChoose={(serviceId) => setChosen({ ...chosen, [filing.id]: serviceId })}
           />
         )}
       </li>
@@ -565,7 +395,7 @@ function RequestForm({ caId, filings }) {
 
   return (
     <div className="space-y-4">
-      {quarters.map((group) => (
+      {groupByQuarter(offered).map((group) => (
         <section key={group.quarter} className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-medium">Due in {group.quarter}</h2>
@@ -574,7 +404,7 @@ function RequestForm({ caId, filings }) {
               variant="outline"
               size="sm"
               onClick={() => selectAll(group.filings)}
-              disabled={allBlocked(group.filings)}
+              disabled={group.filings.every((filing) => filing.blocked_reason !== null)}
             >
               Select all in {group.quarter.split(" ")[0]}
             </Button>
@@ -592,18 +422,14 @@ function RequestForm({ caId, filings }) {
       )}
 
       <p className="text-sm font-medium">Total at the listed prices: {formatRupees(total)}</p>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      <ErrorText>{error}</ErrorText>
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={onSend} disabled={sending || nothingTicked}>
-          {sending ? "Sending..." : "Send request"}
+        <Button onClick={onSend} disabled={busy || ticked.length === 0}>
+          {busy ? "Sending..." : "Send request"}
         </Button>
-        <p className="text-sm text-muted-foreground">
-          {nothingTicked ? "Tick at least one filing. " : ""}The CA accepts or declines it; you can
-          withdraw it until then.
+        <p className="text-sm text-hint">
+          {ticked.length === 0 ? "Tick at least one filing. " : ""}The CA accepts or declines it;
+          you can withdraw it until then.
         </p>
       </div>
     </div>
@@ -612,18 +438,11 @@ function RequestForm({ caId, filings }) {
 
 // The financial-year quarter a date falls in, e.g. "Q3 (Oct–Dec 2026)".
 function quarterOf(isoDate) {
-  const parts = isoDate.split("-"); // "2026-09-20" -> ["2026", "09", "20"]
-  const year = parts[0];
-  const month = Number(parts[1]);
-  if (month >= 4 && month <= 6) {
-    return "Q1 (Apr–Jun " + year + ")";
-  }
-  if (month >= 7 && month <= 9) {
-    return "Q2 (Jul–Sep " + year + ")";
-  }
-  if (month >= 10) {
-    return "Q3 (Oct–Dec " + year + ")";
-  }
+  const year = isoDate.slice(0, 4); // "2026-09-20" -> "2026"
+  const month = Number(isoDate.slice(5, 7)); // -> 9
+  if (month >= 4 && month <= 6) return "Q1 (Apr–Jun " + year + ")";
+  if (month >= 7 && month <= 9) return "Q2 (Jul–Sep " + year + ")";
+  if (month >= 10) return "Q3 (Oct–Dec " + year + ")";
   return "Q4 (Jan–Mar " + year + ")";
 }
 
@@ -637,20 +456,10 @@ function groupByQuarter(filings) {
     if (last && last.quarter === quarter) {
       last.filings.push(filing);
     } else {
-      groups.push({ quarter: quarter, filings: [filing] });
+      groups.push({ quarter, filings: [filing] });
     }
   }
   return groups;
-}
-
-// True when no filing of the group can be picked (all are blocked).
-function allBlocked(filings) {
-  for (const filing of filings) {
-    if (filing.blocked_reason === null) {
-      return false;
-    }
-  }
-  return true;
 }
 
 // The CA's price for a filing. If the CA offers several services for it (ITR),

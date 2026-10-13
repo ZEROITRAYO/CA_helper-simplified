@@ -52,12 +52,6 @@ jobs:
       - name: Install Tesseract
         run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
 
-      - name: Migrations apply cleanly
-        working-directory: backend
-        run: |
-          flask --app app db upgrade
-          flask --app app db check
-
       - name: Backend tests
         working-directory: backend
         run: pytest

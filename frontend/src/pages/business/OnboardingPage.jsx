@@ -16,21 +16,31 @@ import {
   useGstStates,
   useMyBusiness,
   useNicSearch,
+  useRefresh,
 } from "@/api";
-import { FormField } from "@/components/shared";
+import {
+  Choice,
+  ErrorText,
+  field,
+  Field,
+  FormField,
+  Options,
+  QueryStatus,
+  Section,
+  useAction,
+} from "@/components/shared";
 import {
   Badge,
   Button,
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
   Input,
   Label,
+  Select,
 } from "@/components/ui";
 import {
-  cn,
   ENTITY_TYPE_LABELS,
   formatRupees,
   GST_SCHEME_LABELS,
@@ -50,14 +60,8 @@ export function OnboardingPage() {
   const [changes, setChanges] = useState(null);
 
   let content;
-  if (myBusiness.isPending || states.isPending) {
-    content = <p className="text-sm text-muted-foreground">Loading...</p>;
-  } else if (myBusiness.isError || states.isError) {
-    content = (
-      <p role="alert" className="text-sm text-destructive">
-        {errorMessage(myBusiness.error || states.error)}
-      </p>
-    );
+  if (!myBusiness.isSuccess || !states.isSuccess) {
+    content = <QueryStatus query={[myBusiness, states]} />;
   } else if (myBusiness.data === null) {
     content = <BusinessForm states={states.data} />;
   } else if (editing) {
@@ -103,11 +107,13 @@ export function OnboardingPage() {
 
 const AMOUNT = /^[0-9]+(\.[0-9]{1,2})?$/; // rupees, e.g. 4500000 or 4500000.50
 const GSTIN_FORMAT = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
+const COMPANY_TYPES = ["llp", "private_limited"];
 
-// The same rules as the checks in backend/app/onboarding.py.
+// The same rules as the checks in backend/routes_business.py.
 // `states` is [{name, code}]: the state must be one of them, and a GSTIN must fit it.
 function makeSchema(states) {
   const codeOf = Object.fromEntries(states.map((state) => [state.name, state.code]));
+  const code = () => z.string().trim().toUpperCase();
   return (
     z
       .object({
@@ -118,49 +124,36 @@ function makeSchema(states) {
         description: z.string().trim().min(1, "Describe what the business does.").max(1000),
         annual_turnover: z.string().regex(AMOUNT, "Enter an amount in rupees, e.g. 4500000."),
         investment_amount: z.string().regex(AMOUNT, "Enter an amount in rupees, e.g. 800000."),
-        pan: z
-          .string()
-          .trim()
-          .toUpperCase()
-          .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "Enter a valid PAN, e.g. ABCDE1234F."),
+        pan: code().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "Enter a valid PAN, e.g. ABCDE1234F."),
         phone: z.string().regex(/^[6-9][0-9]{9}$/, "Enter a 10-digit mobile number."),
         gst_registered: z.boolean(),
-        gstin: z.string().trim().toUpperCase(),
+        gstin: code(),
         gst_composition: z.boolean(),
         gst_returns: z.enum(["monthly", "quarterly"]),
         accounts_audited_other_law: z.boolean(),
         deducts_tds: z.boolean(),
-        tan: z.string().trim().toUpperCase(),
+        tan: code(),
         pays_salary_above_limit: z.boolean(),
-        cin_llpin: z.string().trim().toUpperCase(),
-        udyam_number: z.string().trim().toUpperCase(),
+        cin_llpin: code(),
+        udyam_number: code(),
       })
       // Fields that are needed only for some businesses.
       .superRefine((form, ctx) => {
+        const problem = (path, message) => ctx.addIssue({ code: "custom", path: [path], message });
         if (form.gst_registered) {
-          const problem = GSTIN_FORMAT.test(form.gstin)
+          const gstinProblem = GSTIN_FORMAT.test(form.gstin)
             ? gstinError(form.gstin, form.pan, form.state, codeOf[form.state])
             : "Enter a valid 15-character GSTIN.";
-          if (problem) {
-            ctx.addIssue({ code: "custom", path: ["gstin"], message: problem });
-          }
+          if (gstinProblem) problem("gstin", gstinProblem);
         }
         if (form.deducts_tds && !/^[A-Z]{4}[0-9]{5}[A-Z]$/.test(form.tan)) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["tan"],
-            message: "Enter a valid TAN, e.g. MUMA12345B.",
-          });
+          problem("tan", "Enter a valid TAN, e.g. MUMA12345B.");
         }
-        if (["llp", "private_limited"].includes(form.entity_type) && !form.cin_llpin) {
-          ctx.addIssue({ code: "custom", path: ["cin_llpin"], message: "Enter the CIN or LLPIN." });
+        if (COMPANY_TYPES.includes(form.entity_type) && !form.cin_llpin) {
+          problem("cin_llpin", "Enter the CIN or LLPIN.");
         }
         if (form.udyam_number && !/^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/.test(form.udyam_number)) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["udyam_number"],
-            message: "Enter it like UDYAM-MH-01-0000001, or leave it empty.",
-          });
+          problem("udyam_number", "Enter it like UDYAM-MH-01-0000001, or leave it empty.");
         }
       })
   );
@@ -202,47 +195,43 @@ function formValues(business) {
   return values;
 }
 
-const SELECT_CLASS =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
-
 // A field filled by "Fill in from a document" is purple until the form is saved.
 const OCR_CLASS = "border-purple-500 bg-purple-50 text-purple-900";
 
 /** Registers a business (no `business`) or edits the saved one. */
 function BusinessForm({ states, business, onSaved, onCancel }) {
   const queryClient = useQueryClient();
+  const refresh = useRefresh();
   const [serverError, setServerError] = useState(null);
   const [ocrFields, setOcrFields] = useState([]); // the fields read from a document
-  const schema = makeSchema(states);
-  const {
-    register,
-    handleSubmit,
-    control,
-    setValue,
-    formState: { errors, isSubmitting },
-  } = useForm({
-    resolver: zodResolver(schema),
+  const form = useForm({
+    resolver: zodResolver(makeSchema(states)),
     defaultValues: business ? formValues(business) : EMPTY_FORM,
   });
+  const { errors, isSubmitting } = form.formState;
 
   // Some fields appear only after a tick or a choice.
-  const gstRegistered = useWatch({ control, name: "gst_registered" });
-  const composition = useWatch({ control, name: "gst_composition" });
-  const deductsTds = useWatch({ control, name: "deducts_tds" });
-  const entityType = useWatch({ control, name: "entity_type" });
-  const needsCin = entityType === "llp" || entityType === "private_limited";
+  const [gstRegistered, composition, deductsTds, entityType] = useWatch({
+    control: form.control,
+    name: ["gst_registered", "gst_composition", "deducts_tds", "entity_type"],
+  });
+  const needsCin = COMPANY_TYPES.includes(entityType);
   const asksOtherAudit = entityType === "partnership" || entityType === "llp";
 
-  // Extra classes for a field: purple when it was read from a document.
-  function ocr(field) {
-    return ocrFields.includes(field) ? OCR_CLASS : "";
+  // Purple for a field that was read from a document.
+  function ocr(name) {
+    return ocrFields.includes(name) ? OCR_CLASS : "";
+  }
+
+  function input(name) {
+    return { ...field(form, name), className: ocr(name) };
   }
 
   async function onSubmit(values) {
     setServerError(null);
     const { gst_returns, ...rest } = values;
     // Send empty codes as null, and only the ones that apply.
-    const form = {
+    const sent = {
       ...rest,
       gstin: values.gst_registered ? values.gstin : null,
       gst_composition: values.gst_registered && values.gst_composition,
@@ -254,13 +243,13 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
       udyam_number: values.udyam_number || null,
     };
     try {
-      const saved = business ? await updateBusiness(form) : await registerBusiness(form);
+      const saved = business ? await updateBusiness(sent) : await registerBusiness(sent);
       queryClient.setQueryData(MY_BUSINESS_KEY, {
         business: saved.business,
         profile: saved.profile,
         nic_code: saved.nic_code,
       });
-      queryClient.invalidateQueries({ queryKey: FILINGS_KEY }); // the filings may have changed
+      refresh(FILINGS_KEY); // the filings may have changed
       onSaved?.(saved);
     } catch (error) {
       setServerError(errorMessage(error));
@@ -268,215 +257,146 @@ function BusinessForm({ states, business, onSaved, onCancel }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{business ? "Edit your business details" : "Register your business"}</CardTitle>
-        <CardDescription>
-          We use these details to work out which filings apply to you and when they are due. PAN,
-          GSTIN, TAN and phone are stored encrypted.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!business && <FillFromDocument setValue={setValue} onFilled={setOcrFields} />}
-        {ocrFields.length > 0 && (
-          <p role="note" className="mb-4 rounded-lg bg-purple-100 p-3 text-sm text-purple-900">
-            The fields in purple were read from your document. Check them before you register, as
-            scanning can be wrong.
-          </p>
-        )}
-        <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              id="legal_name"
-              label="Business name"
-              className={ocr("legal_name")}
-              error={errors.legal_name}
-              {...register("legal_name")}
-            />
-            <div className="space-y-2">
-              <Label htmlFor="entity_type">Type of business</Label>
-              <select
-                id="entity_type"
-                className={cn(SELECT_CLASS, ocr("entity_type"))}
-                {...register("entity_type")}
-              >
-                <option value="">Choose...</option>
-                {Object.entries(ENTITY_TYPE_LABELS).map(([code, text]) => (
-                  <option key={code} value={code}>
-                    {text}
-                  </option>
-                ))}
-              </select>
-              {errors.entity_type && (
-                <p className="text-sm text-destructive">{errors.entity_type.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="state">State</Label>
-              <select
-                id="state"
-                className={cn(SELECT_CLASS, ocr("state"))}
-                {...register("state")}
-              >
-                <option value="">Choose...</option>
-                {states.map((state) => (
-                  <option key={state.code} value={state.name}>
-                    {state.name}
-                  </option>
-                ))}
-              </select>
-              {errors.state && <p className="text-sm text-destructive">{errors.state.message}</p>}
-              {business?.state_needs_review && !errors.state && (
-                <p className="text-xs text-muted-foreground">
-                  You typed "{business.state}" before this list existed: please choose it again.
-                </p>
-              )}
-            </div>
-            <FormField
-              id="phone"
-              label="Mobile number"
-              inputMode="numeric"
-              error={errors.phone}
-              {...register("phone")}
-            />
-            <FormField
-              id="annual_turnover"
-              label="Annual turnover (₹)"
-              inputMode="decimal"
-              error={errors.annual_turnover}
-              {...register("annual_turnover")}
-            />
-            <FormField
-              id="investment_amount"
-              label="Investment in plant & machinery (₹)"
-              inputMode="decimal"
-              error={errors.investment_amount}
-              {...register("investment_amount")}
-            />
-            <FormField
-              id="pan"
-              label="PAN"
-              className={ocr("pan")}
-              error={errors.pan}
-              {...register("pan")}
-            />
-            <FormField
-              id="udyam_number"
-              label="Udyam number (optional)"
-              error={errors.udyam_number}
-              {...register("udyam_number")}
-            />
-            {needsCin && (
-              <FormField
-                id="cin_llpin"
-                label="CIN (company) or LLPIN (LLP)"
-                error={errors.cin_llpin}
-                {...register("cin_llpin")}
-              />
-            )}
-          </div>
-          <FormField id="address" label="Address" error={errors.address} {...register("address")} />
-          <FormField
-            id="description"
-            label="What does the business do?"
-            hint="In your own words, e.g. 'We bake biscuits and cakes'."
-            error={errors.description}
-            {...register("description")}
-          />
-
-          {asksOtherAudit && (
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">Audit</legend>
-              <Checkbox
-                id="accounts_audited_other_law"
-                text="Our accounts are audited under another law (for example the LLP Act or our partnership deed)"
-                {...register("accounts_audited_other_law")}
-              />
-              <p className="text-xs text-muted-foreground">
-                LLPs above certain limits, and firms whose deed requires it, have their accounts
-                audited every year. Ask your CA if you are not sure. An audit moves the income tax
-                return's due date.
+    <Section
+      title={business ? "Edit your business details" : "Register your business"}
+      description="We use these details to work out which filings apply to you and when they are due. PAN, GSTIN, TAN and phone are stored encrypted."
+    >
+      {!business && <FillFromDocument setValue={form.setValue} onFilled={setOcrFields} />}
+      {ocrFields.length > 0 && (
+        <p role="note" className="mb-4 rounded-lg bg-purple-100 p-3 text-sm text-purple-900">
+          The fields in purple were read from your document. Check them before you register, as
+          scanning can be wrong.
+        </p>
+      )}
+      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Business name" {...input("legal_name")} />
+          <Field id="entity_type" label="Type of business" error={errors.entity_type}>
+            <Select id="entity_type" className={ocr("entity_type")} {...form.register("entity_type")}>
+              <Options labels={ENTITY_TYPE_LABELS} empty="Choose..." />
+            </Select>
+          </Field>
+          <Field id="state" label="State" error={errors.state}>
+            <Select id="state" className={ocr("state")} {...form.register("state")}>
+              <option value="">Choose...</option>
+              {states.map((state) => (
+                <option key={state.code} value={state.name}>
+                  {state.name}
+                </option>
+              ))}
+            </Select>
+            {business?.state_needs_review && !errors.state && (
+              <p className="text-xs text-hint">
+                You typed "{business.state}" before this list existed: please choose it again.
               </p>
-            </fieldset>
-          )}
-
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">GST</legend>
-            <Checkbox id="gst_registered" text="GST registered" {...register("gst_registered")} />
-            {gstRegistered && (
-              <>
-                <FormField
-                  id="gstin"
-                  label="GSTIN"
-                  className={ocr("gstin")}
-                  error={errors.gstin}
-                  {...register("gstin")}
-                />
-                <Checkbox
-                  id="gst_composition"
-                  text="I chose the composition scheme"
-                  {...register("gst_composition")}
-                />
-                {!composition && (
-                  <div className="space-y-1">
-                    <p className="text-sm">How do you file GST returns?</p>
-                    <div className="flex gap-4">
-                      <Radio
-                        id="gst_monthly"
-                        value="monthly"
-                        text="Monthly"
-                        {...register("gst_returns")}
-                      />
-                      <Radio
-                        id="gst_quarterly"
-                        value="quarterly"
-                        text="Quarterly (QRMP)"
-                        {...register("gst_returns")}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Quarterly returns (QRMP) are allowed up to a turnover limit; above it, returns
-                      are monthly and your profile will say so.
-                    </p>
-                  </div>
-                )}
-              </>
             )}
-          </fieldset>
+          </Field>
+          <FormField label="Mobile number" inputMode="numeric" {...field(form, "phone")} />
+          <FormField
+            label="Annual turnover (₹)"
+            inputMode="decimal"
+            {...field(form, "annual_turnover")}
+          />
+          <FormField
+            label="Investment in plant & machinery (₹)"
+            inputMode="decimal"
+            {...field(form, "investment_amount")}
+          />
+          <FormField label="PAN" {...input("pan")} />
+          <FormField label="Udyam number (optional)" {...field(form, "udyam_number")} />
+          {needsCin && <FormField label="CIN (company) or LLPIN (LLP)" {...field(form, "cin_llpin")} />}
+        </div>
+        <FormField label="Address" {...field(form, "address")} />
+        <FormField
+          label="What does the business do?"
+          hint="In your own words, e.g. 'We bake biscuits and cakes'."
+          {...field(form, "description")}
+        />
 
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">TDS</legend>
-            <Checkbox id="deducts_tds" text="I deduct TDS" {...register("deducts_tds")} />
-            {deductsTds && (
-              <>
-                <FormField id="tan" label="TAN" error={errors.tan} {...register("tan")} />
-                <Checkbox
-                  id="pays_salary_above_limit"
-                  text="I pay salaries above the taxable limit"
-                  {...register("pays_salary_above_limit")}
-                />
-              </>
-            )}
-          </fieldset>
-
-          {serverError && (
-            <p role="alert" className="text-sm text-destructive">
-              {serverError}
+        {asksOtherAudit && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Audit</legend>
+            <Choice
+              id="accounts_audited_other_law"
+              text="Our accounts are audited under another law (for example the LLP Act or our partnership deed)"
+              {...form.register("accounts_audited_other_law")}
+            />
+            <p className="text-xs text-hint">
+              LLPs above certain limits, and firms whose deed requires it, have their accounts
+              audited every year. Ask your CA if you are not sure. An audit moves the income tax
+              return's due date.
             </p>
+          </fieldset>
+        )}
+
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium">GST</legend>
+          <Choice id="gst_registered" text="GST registered" {...form.register("gst_registered")} />
+          {gstRegistered && (
+            <>
+              <FormField label="GSTIN" {...input("gstin")} />
+              <Choice
+                id="gst_composition"
+                text="I chose the composition scheme"
+                {...form.register("gst_composition")}
+              />
+              {!composition && (
+                <div className="space-y-1">
+                  <p className="text-sm">How do you file GST returns?</p>
+                  <div className="flex gap-4">
+                    <Choice
+                      id="gst_monthly"
+                      type="radio"
+                      value="monthly"
+                      text="Monthly"
+                      {...form.register("gst_returns")}
+                    />
+                    <Choice
+                      id="gst_quarterly"
+                      type="radio"
+                      value="quarterly"
+                      text="Quarterly (QRMP)"
+                      {...form.register("gst_returns")}
+                    />
+                  </div>
+                  <p className="text-xs text-hint">
+                    Quarterly returns (QRMP) are allowed up to a turnover limit; above it, returns
+                    are monthly and your profile will say so.
+                  </p>
+                </div>
+              )}
+            </>
           )}
-          <div className="flex gap-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving..." : business ? "Save changes" : "Register business"}
+        </fieldset>
+
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium">TDS</legend>
+          <Choice id="deducts_tds" text="I deduct TDS" {...form.register("deducts_tds")} />
+          {deductsTds && (
+            <>
+              <FormField label="TAN" {...field(form, "tan")} />
+              <Choice
+                id="pays_salary_above_limit"
+                text="I pay salaries above the taxable limit"
+                {...form.register("pays_salary_above_limit")}
+              />
+            </>
+          )}
+        </fieldset>
+
+        <ErrorText>{serverError}</ErrorText>
+        <div className="flex gap-2">
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Saving..." : business ? "Save changes" : "Register business"}
+          </Button>
+          {onCancel && (
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
             </Button>
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Cancel
-              </Button>
-            )}
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+          )}
+        </div>
+      </form>
+    </Section>
   );
 }
 
@@ -492,46 +412,30 @@ const FILLABLE = {
 /** Fill the form from a GST certificate or PAN card (read on the server, not stored). */
 function FillFromDocument({ setValue, onFilled }) {
   const [message, setMessage] = useState(null);
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, run } = useAction();
 
   async function onFile(event) {
     const file = event.target.files[0];
     if (!file) return;
     setMessage(null);
-    setError(null);
-    setBusy(true);
-    try {
+    await run(async () => {
       const { found } = await readRegistrationDocument(file);
-      const filled = [];
-      const names = [];
-      for (const [field, name] of Object.entries(FILLABLE)) {
-        if (found[field]) {
-          setValue(field, found[field], { shouldValidate: true });
-          filled.push(field);
-          names.push(name);
-        }
-      }
+      const filled = Object.keys(FILLABLE).filter((name) => found[name]);
+      for (const name of filled) setValue(name, found[name], { shouldValidate: true });
       if (found.gstin) setValue("gst_registered", true);
       onFilled(filled);
       setMessage(
-        names.length
-          ? `Filled in: ${names.join(", ")}.`
+        filled.length
+          ? `Filled in: ${filled.map((name) => FILLABLE[name]).join(", ")}.`
           : "We could not find any details in this file. Please type them in.",
       );
-    } catch (failure) {
-      setError(errorMessage(failure));
-    } finally {
-      setBusy(false);
-      event.target.value = ""; // the same file can be chosen again
-    }
+    });
+    event.target.value = ""; // the same file can be chosen again
   }
 
   return (
     <div className="mb-6 space-y-2 rounded-lg border border-dashed p-4">
-      <Label htmlFor="autofill_file">
-        Fill in from your GST certificate or PAN card (optional)
-      </Label>
+      <Label htmlFor="autofill_file">Fill in from your GST certificate or PAN card (optional)</Label>
       <input
         id="autofill_file"
         type="file"
@@ -540,7 +444,7 @@ function FillFromDocument({ setValue, onFilled }) {
         disabled={busy}
         onChange={onFile}
       />
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-hint">
         {busy
           ? "Reading the file..."
           : "The file is read on our server and not kept. Nothing is saved until you register."}
@@ -550,30 +454,8 @@ function FillFromDocument({ setValue, onFilled }) {
           {message}
         </p>
       )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      <ErrorText>{error}</ErrorText>
     </div>
-  );
-}
-
-function Checkbox({ id, text, ...inputProps }) {
-  return (
-    <label htmlFor={id} className="flex items-center gap-2 text-sm">
-      <input id={id} type="checkbox" {...inputProps} />
-      {text}
-    </label>
-  );
-}
-
-function Radio({ id, text, ...inputProps }) {
-  return (
-    <label htmlFor={id} className="flex items-center gap-2 text-sm">
-      <input id={id} type="radio" {...inputProps} />
-      {text}
-    </label>
   );
 }
 
@@ -581,9 +463,7 @@ function Radio({ id, text, ...inputProps }) {
 // The regulatory profile
 // ----------------------------------------------------------------------------
 
-function yesNo(value) {
-  return value ? "Yes" : "No";
-}
+const yesNo = (value) => (value ? "Yes" : "No");
 
 // Every profile line: [code in the profile, title, how to show its value].
 const LINES = [
@@ -597,20 +477,24 @@ const LINES = [
   ["files_26q", "TDS return, other payments (Form 140, earlier 26Q)", yesNo],
 ];
 
+// The short GST chip of each scheme ("No GST" when not registered).
+const GST_CHIPS = { regular_qrmp: "QRMP", regular_monthly: "GST monthly", composition: "Composition" };
+
 // The short summary at the top of the profile, e.g. Micro · QRMP · ITR-4 · 26Q.
 function summaryChips(profile) {
-  const chips = [label(MSME_TIER_LABELS, profile.msme_tier)];
-  if (profile.gst_scheme === "regular_qrmp") chips.push("QRMP");
-  else if (profile.gst_scheme === "regular_monthly") chips.push("GST monthly");
-  else if (profile.gst_scheme === "composition") chips.push("Composition");
-  else chips.push("No GST");
-  chips.push(label(ITR_FORM_LABELS, profile.itr_form));
+  const chips = [
+    label(MSME_TIER_LABELS, profile.msme_tier),
+    GST_CHIPS[profile.gst_scheme] ?? "No GST",
+    label(ITR_FORM_LABELS, profile.itr_form),
+  ];
   if (profile.presumptive_eligible) chips.push("Presumptive");
   if (profile.audit_applicable || profile.other_audit_applicable) chips.push("Audit");
   if (profile.files_24q) chips.push("24Q");
   if (profile.files_26q) chips.push("26Q");
   return chips;
 }
+
+const WARNING = "rounded-lg bg-amber-100 p-3 text-sm text-amber-900";
 
 function ProfileView({ business, profile, nicCode, onEdit }) {
   return (
@@ -643,22 +527,22 @@ function ProfileView({ business, profile, nicCode, onEdit }) {
       </Card>
 
       {business.state_needs_review && (
-        <p role="alert" className="rounded-lg bg-amber-100 p-3 text-sm text-amber-900">
+        <p role="alert" className={WARNING}>
           Your state "{business.state}" is not in our list. Choose it again with Edit details.
         </p>
       )}
       {profile.gst_registration_suggested && (
-        <p role="alert" className="rounded-lg bg-amber-100 p-3 text-sm text-amber-900">
+        <p role="alert" className={WARNING}>
           {profile.explanations.gst_scheme}
         </p>
       )}
       {profile.roc_not_tracked && (
-        <p className="rounded-lg bg-muted p-3 text-sm">{profile.explanations.roc_not_tracked}</p>
+        <p className="rounded-lg bg-soft p-3 text-sm">{profile.explanations.roc_not_tracked}</p>
       )}
 
       <NicCodeCard nicCode={nicCode} />
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-hint">
         The legal limits behind this profile are still being verified. Check with a CA before
         relying on it.
       </p>
@@ -676,41 +560,32 @@ function plural(count, word) {
 
 function WhatChanged({ changes }) {
   const filings = changes.filings;
-  const filingLines = [];
-  if (filings.added) filingLines.push(`${plural(filings.added, "filing")} added`);
-  if (filings.removed) filingLines.push(`${plural(filings.removed, "filing")} no longer needed`);
+  const lines = changes.profile.map((change) => {
+    const [, title, show] = LINES.find(([key]) => key === change.line);
+    return `${title}: ${show(change.old)} → ${show(change.new)}`;
+  });
+  if (filings.added) lines.push(`${plural(filings.added, "filing")} added`);
+  if (filings.removed) lines.push(`${plural(filings.removed, "filing")} no longer needed`);
   if (filings.kept_with_ca) {
-    filingLines.push(
+    lines.push(
       `${plural(filings.kept_with_ca, "filing")} kept although no longer needed, because a CA has it`,
     );
   }
 
   return (
-    <Card role="status">
-      <CardHeader>
-        <CardTitle>Saved. What changed</CardTitle>
-        {changes.profile.length === 0 && filingLines.length === 0 && (
-          <CardDescription>Nothing in your profile or filings changed.</CardDescription>
-        )}
-      </CardHeader>
-      {(changes.profile.length > 0 || filingLines.length > 0) && (
-        <CardContent>
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {changes.profile.map((change) => {
-              const [, title, show] = LINES.find(([key]) => key === change.line);
-              return (
-                <li key={change.line}>
-                  {title}: {show(change.old)} → {show(change.new)}
-                </li>
-              );
-            })}
-            {filingLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </CardContent>
+    <Section
+      role="status"
+      title="Saved. What changed"
+      description={lines.length === 0 && "Nothing in your profile or filings changed."}
+    >
+      {lines.length > 0 && (
+        <ul className="list-disc space-y-1 pl-5 text-sm">
+          {lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
       )}
-    </Card>
+    </Section>
   );
 }
 
@@ -721,112 +596,86 @@ export function NicCodeCard({ nicCode }) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [chosen, setChosen] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
+  const { busy, error, run } = useAction();
   const results = useNicSearch(search);
+  const rows = results.data ?? [];
 
-  async function onConfirm() {
-    setError(null);
-    setBusy(true);
-    try {
+  function onConfirm() {
+    run(async () => {
       const code = await saveNicCode(chosen);
       // Show the new code on the page without loading the whole business again.
       const cached = queryClient.getQueryData(MY_BUSINESS_KEY);
-      if (cached) {
-        queryClient.setQueryData(MY_BUSINESS_KEY, { ...cached, nic_code: code });
-      }
+      if (cached) queryClient.setQueryData(MY_BUSINESS_KEY, { ...cached, nic_code: code });
       setSearch("");
       setChosen("");
       setSaved(true);
-    } catch (problem) {
-      setError(errorMessage(problem));
-    }
-    setBusy(false);
-  }
-
-  let searchRows = [];
-  if (results.data) {
-    searchRows = results.data;
+    });
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Business activity (NIC code)</CardTitle>
-        <CardDescription>
-          The official code for what your business does. Forms like Udyam and GST registration ask
-          for it.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm">
-          {nicCode ? (
-            <>
-              Your code: <span className="font-semibold">{nicCode.code}</span> ·{" "}
-              {nicCode.description}
-            </>
-          ) : (
-            "Not chosen yet."
-          )}
+    <Section
+      title="Business activity (NIC code)"
+      description="The official code for what your business does. Forms like Udyam and GST registration ask for it."
+      contentClassName="space-y-4"
+    >
+      <p className="text-sm">
+        {nicCode ? (
+          <>
+            Your code: <span className="font-semibold">{nicCode.code}</span> · {nicCode.description}
+          </>
+        ) : (
+          "Not chosen yet."
+        )}
+      </p>
+      {saved && (
+        <p role="status" className="text-sm text-green-700">
+          Saved.
         </p>
-        {saved && (
-          <p role="status" className="text-sm text-green-700">
-            Saved.
-          </p>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="nic-search">Search the NIC list</Label>
+        <Input
+          id="nic-search"
+          placeholder="e.g. bakery, tailoring or 10712"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        {rows.length > 0 && (
+          <fieldset className="space-y-2">
+            <legend className="sr-only">Search results</legend>
+            {rows.map((nic) => (
+              <label
+                key={nic.code}
+                htmlFor={"nic-" + nic.code}
+                className="flex items-start gap-2 rounded-lg border p-2 text-sm"
+              >
+                <input
+                  id={"nic-" + nic.code}
+                  type="radio"
+                  name="nic-code"
+                  value={nic.code}
+                  checked={chosen === nic.code}
+                  onChange={() => setChosen(nic.code)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-semibold">{nic.code}</span> · {nic.description}
+                </span>
+              </label>
+            ))}
+          </fieldset>
         )}
-
-        <div className="space-y-2">
-          <Label htmlFor="nic-search">Search the NIC list</Label>
-          <Input
-            id="nic-search"
-            placeholder="e.g. bakery, tailoring or 10712"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          {searchRows.length > 0 && (
-            <fieldset className="space-y-2">
-              <legend className="sr-only">Search results</legend>
-              {searchRows.map((nic) => (
-                <CodeOption key={nic.code} nic={nic} chosen={chosen} onChoose={setChosen} />
-              ))}
-            </fieldset>
-          )}
-          {search.trim().length >= 2 && results.data && searchRows.length === 0 && (
-            <p className="text-sm text-muted-foreground">No code found.</p>
-          )}
-        </div>
-
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
+        {search.trim().length >= 2 && results.data && rows.length === 0 && (
+          <p className="text-sm text-hint">No code found.</p>
         )}
-        <Button type="button" onClick={onConfirm} disabled={busy || chosen === ""}>
-          Confirm
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
+      </div>
 
-// One code as a radio button.
-function CodeOption({ nic, chosen, onChoose }) {
-  const id = "nic-" + nic.code;
-  return (
-    <label htmlFor={id} className="flex items-start gap-2 rounded-lg border p-2 text-sm">
-      <input
-        id={id}
-        type="radio"
-        name="nic-code"
-        value={nic.code}
-        checked={chosen === nic.code}
-        onChange={() => onChoose(nic.code)}
-        className="mt-1"
-      />
-      <span>
-        <span className="font-semibold">{nic.code}</span> · {nic.description}
-      </span>
-    </label>
+      <ErrorText>{error}</ErrorText>
+      <Button type="button" onClick={onConfirm} disabled={busy || chosen === ""}>
+        Confirm
+      </Button>
+    </Section>
   );
 }

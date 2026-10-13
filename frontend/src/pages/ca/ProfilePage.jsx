@@ -18,7 +18,19 @@ import {
   useServices,
 } from "@/api";
 import { useAuth } from "@/auth";
-import { FormField, QueryStatus } from "@/components/shared";
+import {
+  caFacts,
+  ErrorText,
+  field,
+  Field,
+  FormField,
+  Notice,
+  PageTitle,
+  QueryStatus,
+  Section,
+  SpecializationBadges,
+  useAction,
+} from "@/components/shared";
 import {
   Badge,
   Button,
@@ -30,18 +42,20 @@ import {
   CardTitle,
   Input,
   Label,
+  Textarea,
 } from "@/components/ui";
 import {
   CA_LANGUAGE_LABELS,
   CA_SPECIALIZATION_LABELS,
   CA_VERIFICATION_STATUS_LABELS,
   label,
+  labelList,
   SERVICE_UNIT_LABELS,
 } from "@/lib";
 
 // --- CaProfilePage -----------------------------------------------------------------------------
 
-// The same rules as the checks in backend/app/marketplace.py.
+// The same rules as the checks in backend/routes_marketplace.py.
 const profileSchema = z.object({
   membership_no: z.string().regex(/^[0-9]{6}$/, "Enter your 6-digit ICAI membership number."),
   cop_number: z.string().trim().min(1, "Enter your Certificate of Practice number.").max(20),
@@ -63,6 +77,12 @@ const EMPTY_FORM = {
   years_experience: "",
   about: "",
 };
+
+// The form's values: the saved profile's, or empty fields for a new CA.
+function formValues(profile) {
+  if (!profile) return EMPTY_FORM;
+  return Object.fromEntries(Object.keys(EMPTY_FORM).map((key) => [key, profile[key]]));
+}
 
 // Badge colour for each verification status: red until verified, then green.
 const STATUS_COLORS = {
@@ -105,11 +125,7 @@ export function CaProfilePage() {
 }
 
 function StatusCard({ profile }) {
-  // No profile yet (null) -> no status.
-  let status = null;
-  if (profile) {
-    status = profile.verification_status;
-  }
+  const status = profile?.verification_status; // no profile yet (null) -> no status
   return (
     <Card>
       <CardHeader>
@@ -141,39 +157,30 @@ function StatusCard({ profile }) {
 function CertificateCard({ profile }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState(null);
-  const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
-  const [sending, setSending] = useState(false);
+  const { busy, error, run } = useAction();
 
   async function onUpload(event) {
     event.preventDefault();
-    setError(null);
     setDone(false);
-    setSending(true);
-    try {
-      const updated = await uploadCertificate(file);
-      queryClient.setQueryData(CA_PROFILE_KEY, updated);
+    await run(async () => {
+      queryClient.setQueryData(CA_PROFILE_KEY, await uploadCertificate(file));
       setDone(true);
-    } catch (uploadError) {
-      setError(errorMessage(uploadError));
-    }
-    setSending(false);
+    });
+  }
+
+  let description = "Save your profile first, then upload your certificate.";
+  if (profile?.has_certificate) {
+    description = "Uploaded. Uploading a new one sends your profile back for verification.";
+  } else if (profile) {
+    description =
+      "Upload your Certificate of Practice (PDF, JPG or PNG, up to 5 MB). An admin checks it before verifying you.";
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Certificate of Practice</CardTitle>
-        <CardDescription>
-          {!profile
-            ? "Save your profile first, then upload your certificate."
-            : profile.has_certificate
-              ? "Uploaded. Uploading a new one sends your profile back for verification."
-              : "Upload your Certificate of Practice (PDF, JPG or PNG, up to 5 MB). An admin checks it before verifying you."}
-        </CardDescription>
-      </CardHeader>
+    <Section title="Certificate of Practice" description={description}>
       {profile && (
-        <CardContent>
+        <>
           <form className="flex flex-wrap items-center gap-3" onSubmit={onUpload}>
             <Label htmlFor="certificate" className="sr-only">
               Certificate file
@@ -183,25 +190,21 @@ function CertificateCard({ profile }) {
               type="file"
               accept=".pdf,.jpg,.jpeg,.png"
               className="w-auto"
-              onChange={(event) => setFile(firstFile(event.target.files))}
+              onChange={(event) => setFile(event.target.files[0] || null)}
             />
-            <Button type="submit" disabled={!file || sending}>
-              {sending ? "Uploading..." : "Upload certificate"}
+            <Button type="submit" disabled={!file || busy}>
+              {busy ? "Uploading..." : "Upload certificate"}
             </Button>
           </form>
-          {error && (
-            <p role="alert" className="mt-2 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+          <ErrorText className="mt-2">{error}</ErrorText>
           {done && (
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-2 text-sm text-hint">
               Certificate uploaded. An admin will check it.
             </p>
           )}
-        </CardContent>
+        </>
       )}
-    </Card>
+    </Section>
   );
 }
 
@@ -213,27 +216,17 @@ function PreviewCard({ profile }) {
       <CardHeader>
         <CardDescription>Preview: how businesses see you</CardDescription>
         <CardTitle>{user ? user.full_name : ""}</CardTitle>
-        <CardDescription>
-          {profile.city} · {profile.years_experience}{" "}
-          {profile.years_experience === 1 ? "year" : "years"} of experience · ICAI no.{" "}
-          {profile.membership_no}
-        </CardDescription>
+        <CardDescription>{caFacts(profile)}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <div className="flex flex-wrap gap-1">
-          {profile.specializations.map((code) => (
-            <Badge key={code} variant="outline">
-              {label(CA_SPECIALIZATION_LABELS, code)}
-            </Badge>
-          ))}
-        </div>
+        <SpecializationBadges codes={profile.specializations} />
         <p>
-          <span className="text-muted-foreground">Languages: </span>
-          {profile.languages.map((code) => label(CA_LANGUAGE_LABELS, code)).join(", ")}
+          <span className="text-hint">Languages: </span>
+          {labelList(CA_LANGUAGE_LABELS, profile.languages)}
         </p>
         {profile.about && <p>{profile.about}</p>}
         {profile.verification_status !== "verified" && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-hint">
             Businesses see this once an admin has verified you.
           </p>
         )}
@@ -247,38 +240,24 @@ function CaProfileForm({ profile }) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState(null);
   const [saved, setSaved] = useState(false);
-  const {
-    register,
-    handleSubmit,
-    setError,
-    control,
-    formState: { errors, isSubmitting },
-  } = useForm({
-    resolver: zodResolver(profileSchema),
-    defaultValues: startingValues(profile),
-  });
+  const form = useForm({ resolver: zodResolver(profileSchema), defaultValues: formValues(profile) });
+  const { errors, isSubmitting } = form.formState;
   // A verified CA changing a number is told before saving that it needs a new check.
-  const typed = useWatch({ control, name: IDENTITY_FIELDS });
-  let needsNewCheck = false;
-  if (profile && profile.verification_status === "verified") {
-    for (let index = 0; index < IDENTITY_FIELDS.length; index++) {
-      if (typed[index] !== profile[IDENTITY_FIELDS[index]]) {
-        needsNewCheck = true;
-      }
-    }
-  }
+  const typed = useWatch({ control: form.control, name: IDENTITY_FIELDS });
+  const needsNewCheck =
+    profile?.verification_status === "verified" &&
+    IDENTITY_FIELDS.some((name, index) => typed[index] !== profile[name]);
 
   async function onSubmit(values) {
     setServerError(null);
     setSaved(false);
     try {
-      const updated = await saveCaProfile(values);
-      queryClient.setQueryData(CA_PROFILE_KEY, updated);
+      queryClient.setQueryData(CA_PROFILE_KEY, await saveCaProfile(values));
       setSaved(true);
     } catch (error) {
       if (error instanceof ApiRequestError && error.code === "DUPLICATE_MEMBERSHIP_NO") {
         // Show it on the field it is about, not at the bottom of the form.
-        setError("membership_no", { message: error.message }, { shouldFocus: true });
+        form.setError("membership_no", { message: error.message }, { shouldFocus: true });
       } else {
         setServerError(errorMessage(error));
       }
@@ -286,90 +265,57 @@ function CaProfileForm({ profile }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Practice details</CardTitle>
-        <CardDescription>Businesses see everything here except your CoP number.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              id="membership_no"
-              label="ICAI membership number"
-              inputMode="numeric"
-              error={errors.membership_no}
-              {...register("membership_no")}
-            />
-            <FormField
-              id="cop_number"
-              label="Certificate of Practice number"
-              error={errors.cop_number}
-              {...register("cop_number")}
-            />
-            <FormField id="city" label="City" error={errors.city} {...register("city")} />
-            <FormField
-              id="years_experience"
-              label="Years of experience"
-              type="number"
-              min={0}
-              error={errors.years_experience}
-              {...register("years_experience")}
-            />
-            <FormField
-              id="capacity"
-              label="Capacity (clients at a time)"
-              type="number"
-              min={1}
-              error={errors.capacity}
-              {...register("capacity")}
-            />
-          </div>
-          {needsNewCheck && (
-            <p className="rounded-lg bg-amber-100 p-3 text-sm text-amber-900">
-              You changed your membership or CoP number: after saving, your profile goes back to an
-              admin for verification and you leave the marketplace until then.
-            </p>
-          )}
-          <CheckboxGroup
-            legend="Specializations"
-            labels={CA_SPECIALIZATION_LABELS}
-            error={errors.specializations}
-            {...register("specializations")}
+    <Section title="Practice details" description="Businesses see everything here except your CoP number.">
+      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            label="ICAI membership number"
+            inputMode="numeric"
+            {...field(form, "membership_no")}
           />
-          <CheckboxGroup
-            legend="Languages"
-            labels={CA_LANGUAGE_LABELS}
-            error={errors.languages}
-            {...register("languages")}
+          <FormField label="Certificate of Practice number" {...field(form, "cop_number")} />
+          <FormField label="City" {...field(form, "city")} />
+          <FormField
+            label="Years of experience"
+            type="number"
+            min={0}
+            {...field(form, "years_experience")}
           />
-          <div className="space-y-2">
-            <Label htmlFor="about">About your practice (optional)</Label>
-            <textarea
-              id="about"
-              rows={3}
-              aria-invalid={!!errors.about}
-              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
-              {...register("about")}
-            />
-            {errors.about && <p className="text-sm text-destructive">{errors.about.message}</p>}
-          </div>
-          {serverError && (
-            <p role="alert" className="text-sm text-destructive">
-              {serverError}
-            </p>
-          )}
-          {saved && (
-            <p role="status" className="text-sm text-muted-foreground">
-              Profile saved.
-            </p>
-          )}
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : "Save profile"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+          <FormField
+            label="Capacity (clients at a time)"
+            type="number"
+            min={1}
+            {...field(form, "capacity")}
+          />
+        </div>
+        {needsNewCheck && (
+          <p className="rounded-lg bg-amber-100 p-3 text-sm text-amber-900">
+            You changed your membership or CoP number: after saving, your profile goes back to an
+            admin for verification and you leave the marketplace until then.
+          </p>
+        )}
+        <CheckboxGroup
+          legend="Specializations"
+          labels={CA_SPECIALIZATION_LABELS}
+          error={errors.specializations}
+          {...form.register("specializations")}
+        />
+        <CheckboxGroup
+          legend="Languages"
+          labels={CA_LANGUAGE_LABELS}
+          error={errors.languages}
+          {...form.register("languages")}
+        />
+        <Field id="about" label="About your practice (optional)" error={errors.about}>
+          <Textarea id="about" rows={3} aria-invalid={!!errors.about} {...form.register("about")} />
+        </Field>
+        <ErrorText>{serverError}</ErrorText>
+        <Notice>{saved && "Profile saved."}</Notice>
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Saving..." : "Save profile"}
+        </Button>
+      </form>
+    </Section>
   );
 }
 
@@ -390,39 +336,14 @@ function CheckboxGroup({ legend, labels, error, ...inputProps }) {
           </label>
         ))}
       </div>
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
+      {error && <p className="text-sm text-danger">{error.message}</p>}
     </fieldset>
   );
 }
 
-// The form's starting values: the saved profile, or empty fields for a new CA.
-function startingValues(profile) {
-  if (!profile) {
-    return EMPTY_FORM;
-  }
-  return {
-    membership_no: profile.membership_no,
-    cop_number: profile.cop_number,
-    city: profile.city,
-    languages: profile.languages,
-    specializations: profile.specializations,
-    capacity: profile.capacity,
-    years_experience: profile.years_experience,
-    about: profile.about,
-  };
-}
-
-// The file the CA picked in a file input, or null if they picked none.
-function firstFile(files) {
-  if (files.length === 0) {
-    return null;
-  }
-  return files[0];
-}
-
 // --- CaServicesPage ----------------------------------------------------------------------------
 
-// The same limits as the checks in backend/app/marketplace.py.
+// The same limits as the checks in backend/routes_marketplace.py.
 const MIN_PRICE = 1;
 const MAX_PRICE = 1000000;
 const PRICE_ERROR = "Enter a price from 1 to 10,00,000.";
@@ -434,18 +355,11 @@ export function CaServicesPage() {
   const services = useServices();
   const menu = useCaServices();
 
-  let content;
-  if (profile.isPending || services.isPending || menu.isPending) {
-    content = <p className="text-sm text-muted-foreground">Loading...</p>;
-  } else if (profile.isError || services.isError || menu.isError) {
-    const error = profile.error || services.error || menu.error;
-    content = (
-      <p role="alert" className="text-sm text-destructive">
-        {errorMessage(error)}
-      </p>
-    );
-  } else if (profile.data === null) {
-    content = (
+  let content = <QueryStatus query={[profile, services, menu]} />;
+  if (profile.isSuccess && services.isSuccess && menu.isSuccess) {
+    content = profile.data ? (
+      <PriceMenu services={services.data} menu={menu.data} profile={profile.data} />
+    ) : (
       <Card>
         <CardHeader>
           <CardTitle>Complete your profile first</CardTitle>
@@ -456,25 +370,13 @@ export function CaServicesPage() {
         </CardHeader>
       </Card>
     );
-  } else {
-    content = (
-      <PriceMenu
-        services={services.data}
-        menu={menu.data}
-        profile={profile.data}
-        verified={profile.data.verification_status === "verified"}
-      />
-    );
   }
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Services & prices</h1>
-        <p className="text-sm text-muted-foreground">
-          Tick the services you offer and enter your fee. Businesses pay exactly this fee.
-        </p>
-      </div>
+      <PageTitle title="Services & prices">
+        Tick the services you offer and enter your fee. Businesses pay exactly this fee.
+      </PageTitle>
       {content}
     </div>
   );
@@ -493,15 +395,14 @@ function startingRows(services, menu) {
   return rows;
 }
 
-function PriceMenu({ services, menu, profile, verified }) {
+function PriceMenu({ services, menu, profile }) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState(startingRows(services, menu));
   const [errors, setErrors] = useState({});
   // Shown next to Save: the rows above may be far up the page (13 services).
   const [errorSummary, setErrorSummary] = useState(null);
-  const [serverError, setServerError] = useState(null);
   const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const { busy, error, setError, run } = useAction();
 
   function updateRow(serviceId, changes) {
     setRows({ ...rows, [serviceId]: { ...rows[serviceId], ...changes } });
@@ -510,7 +411,7 @@ function PriceMenu({ services, menu, profile, verified }) {
 
   async function onSave(event) {
     event.preventDefault();
-    setServerError(null);
+    setError(null);
     setErrorSummary(null);
     setSaved(false);
 
@@ -520,9 +421,7 @@ function PriceMenu({ services, menu, profile, verified }) {
     const wrongNames = [];
     for (const service of services) {
       const row = rows[service.id];
-      if (!row.offered) {
-        continue;
-      }
+      if (!row.offered) continue;
       const price = Number(row.price);
       if (row.price === "" || isNaN(price) || price < MIN_PRICE || price > MAX_PRICE) {
         newErrors[service.id] = PRICE_ERROR;
@@ -536,28 +435,20 @@ function PriceMenu({ services, menu, profile, verified }) {
       const count = wrongNames.length === 1 ? "1 price" : wrongNames.length + " prices";
       setErrorSummary("Fix " + count + ": " + wrongNames.join(", ") + ".");
       // Move to the first wrong price, which may be out of view.
-      const firstWrong = document.getElementById(priceId(Object.keys(newErrors)[0]));
-      if (firstWrong) {
-        firstWrong.focus();
-      }
+      document.getElementById(priceId(Object.keys(newErrors)[0]))?.focus();
       return;
     }
 
-    setSaving(true);
-    try {
-      const savedMenu = await saveCaServices(items);
-      queryClient.setQueryData(CA_SERVICES_KEY, savedMenu);
+    await run(async () => {
+      queryClient.setQueryData(CA_SERVICES_KEY, await saveCaServices(items));
       setSaved(true);
-    } catch (error) {
-      setServerError(errorMessage(error));
-    }
-    setSaving(false);
+    });
   }
 
   return (
     <form className="space-y-4" onSubmit={onSave} noValidate>
-      {!verified && (
-        <p className="text-sm text-muted-foreground">
+      {profile.verification_status !== "verified" && (
+        <p className="text-sm text-hint">
           Businesses see your prices once an admin has verified your profile.
         </p>
       )}
@@ -573,23 +464,11 @@ function PriceMenu({ services, menu, profile, verified }) {
           />
         ))}
       </ul>
-      {errorSummary && (
-        <p role="alert" className="text-sm text-destructive">
-          {errorSummary}
-        </p>
-      )}
-      {serverError && (
-        <p role="alert" className="text-sm text-destructive">
-          {serverError}
-        </p>
-      )}
-      {saved && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Prices saved.
-        </p>
-      )}
-      <Button type="submit" disabled={saving}>
-        {saving ? "Saving..." : "Save prices"}
+      <ErrorText>{errorSummary}</ErrorText>
+      <ErrorText>{error}</ErrorText>
+      <Notice>{saved && "Prices saved."}</Notice>
+      <Button type="submit" disabled={busy}>
+        {busy ? "Saving..." : "Save prices"}
       </Button>
     </form>
   );
@@ -598,8 +477,7 @@ function PriceMenu({ services, menu, profile, verified }) {
 /** Lists priced services whose specialization the profile lacks, with an add button. */
 function SpecializationWarning({ services, rows, profile }) {
   const queryClient = useQueryClient();
-  const [error, setError] = useState(null);
-  const [adding, setAdding] = useState(false);
+  const { busy, error, run } = useAction();
 
   const missing = [];
   for (const service of services) {
@@ -610,38 +488,25 @@ function SpecializationWarning({ services, rows, profile }) {
   }
   if (missing.length === 0) return null;
 
-  async function onAdd() {
-    setError(null);
-    setAdding(true);
-    try {
-      const updated = await saveCaProfile({
-        membership_no: profile.membership_no,
-        cop_number: profile.cop_number,
-        city: profile.city,
-        languages: profile.languages,
-        specializations: profile.specializations.concat(missing),
-        capacity: profile.capacity,
-        years_experience: profile.years_experience,
-        about: profile.about,
-      });
+  function onAdd() {
+    run(async () => {
+      const specializations = profile.specializations.concat(missing);
+      const updated = await saveCaProfile({ ...formValues(profile), specializations });
       queryClient.setQueryData(CA_PROFILE_KEY, updated);
-    } catch (addError) {
-      setError(errorMessage(addError));
-    }
-    setAdding(false);
+    });
   }
 
   return (
     <div role="note" className="space-y-2 rounded-lg bg-amber-100 p-3 text-sm text-amber-900">
       <p>
         You price services that are not among your specializations:{" "}
-        {missing.map((code) => label(CA_SPECIALIZATION_LABELS, code)).join(", ")}. Businesses
-        filtering by specialization will not find you for them.
+        {labelList(CA_SPECIALIZATION_LABELS, missing)}. Businesses filtering by specialization will
+        not find you for them.
       </p>
-      <Button type="button" size="sm" variant="outline" onClick={onAdd} disabled={adding}>
-        {adding ? "Adding..." : "Add to specializations"}
+      <Button type="button" size="sm" variant="outline" onClick={onAdd} disabled={busy}>
+        {busy ? "Adding..." : "Add to specializations"}
       </Button>
-      {error && <p className="text-destructive">{error}</p>}
+      {error && <p className="text-danger">{error}</p>}
     </div>
   );
 }
@@ -652,6 +517,7 @@ function priceId(serviceId) {
 }
 
 function ServiceRow({ service, row, error, onChange }) {
+  const id = priceId(service.id);
   return (
     <li className="space-y-2 rounded-lg border p-3">
       <label htmlFor={"offer-" + service.id} className="flex items-center gap-2 font-medium">
@@ -663,13 +529,13 @@ function ServiceRow({ service, row, error, onChange }) {
         />
         {service.name}
       </label>
-      <p className="text-xs text-muted-foreground">{service.description}</p>
+      <p className="text-xs text-hint">{service.description}</p>
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span>₹</span>
         <Input
-          id={priceId(service.id)}
+          id={id}
           aria-label={"Price for " + service.name}
-          aria-describedby={error ? priceId(service.id) + "-error" : undefined}
+          aria-describedby={error ? id + "-error" : undefined}
           inputMode="decimal"
           className="w-32"
           value={row.price}
@@ -680,7 +546,7 @@ function ServiceRow({ service, row, error, onChange }) {
         <span>{label(SERVICE_UNIT_LABELS, service.unit)}</span>
       </div>
       {error && (
-        <p id={priceId(service.id) + "-error"} className="text-sm text-destructive">
+        <p id={id + "-error"} className="text-sm text-danger">
           {error}
         </p>
       )}

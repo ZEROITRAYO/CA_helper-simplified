@@ -1,10 +1,9 @@
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router";
 
 import { useAuth } from "@/auth";
-import { Button, buttonClass } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { cn, ROLE_HOME, USER_ROLE_LABELS } from "@/lib";
 import {
-  ChangePasswordPage,
   ForgotPasswordPage,
   HomePage,
   LoginPage,
@@ -75,7 +74,7 @@ function roleArea(role, children) {
         <AppShell role={role} nav={NAV[role]} />
       </RequireRole>
     ),
-    children: [...children, { path: "change-password", element: <ChangePasswordPage /> }],
+    children,
   };
 }
 
@@ -132,13 +131,13 @@ export function AppShell({ role, nav }) {
   const home = ROLE_HOME[role];
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r bg-muted/40 p-4">
+    <div className="flex min-h-screen bg-background text-ink">
+      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r bg-soft/40 p-4">
         <div>
           <Link to={home} className="text-lg font-semibold">
             CA Helper
           </Link>
-          <p className="text-xs text-muted-foreground">{title}</p>
+          <p className="text-xs text-hint">{title}</p>
         </div>
         <nav
           className="mt-6 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto"
@@ -152,7 +151,7 @@ export function AppShell({ role, nav }) {
               className={({ isActive }) =>
                 cn(
                   "rounded-md px-3 py-2 text-sm",
-                  isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted",
+                  isActive ? "bg-primary text-white" : "hover:bg-soft",
                 )
               }
             >
@@ -162,9 +161,6 @@ export function AppShell({ role, nav }) {
         </nav>
         <div className="space-y-2 border-t pt-4">
           <p className="truncate text-sm">{user?.full_name}</p>
-          <Link to={`${home}/change-password`} className={buttonClass("ghost", "sm", "w-full")}>
-            Change password
-          </Link>
           <Button variant="outline" size="sm" className="w-full" onClick={logout}>
             Log out
           </Button>
@@ -206,7 +202,7 @@ export function RequireRole({ role, children }) {
 /** Layout for public pages: landing, login, signup, verify email, forgot/reset password. */
 export function PublicLayout() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-ink">
       <header className="border-b px-8 py-4">
         <Link to="/" className="text-lg font-semibold">
           CA Helper

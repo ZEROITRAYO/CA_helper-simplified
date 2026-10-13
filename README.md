@@ -6,7 +6,7 @@ Accountant, and keeps verifiable proof of what was filed. It never files returns
 connects and verifies. MTech CSE lab project, IIT Bombay.
 
 - Product scope: [docs/SCOPE.md](docs/SCOPE.md) · Rules for code: [CLAUDE.md](CLAUDE.md)
-- Stack: Flask 3 + SQLAlchemy 2 + Postgres (backend, `backend/app/`), React + Vite + JavaScript +
+- Stack: Flask 3 + SQLAlchemy 2 + Postgres (backend, `backend/`), React + Vite + JavaScript +
   Tailwind (frontend, `frontend/src/`), an APScheduler worker, Mailpit for email, all in Docker Compose.
 
 ## Run it
@@ -27,10 +27,11 @@ docker compose up
 The shared Neon database is ready: it has the tables, the rules and the demo data. Nothing to run.
 
 A new, empty database (your own) needs this once. In a second terminal in the same folder: the first line creates
-the tables and adds the rules, forms, NIC codes and service catalog; the second adds the demo data.
+the tables (they are also made when the backend starts) and adds the rules, forms, NIC codes and service
+catalog; the second adds the demo data.
 
 ```bash
-docker compose exec backend sh -c "flask --app app db upgrade && flask --app app seed"
+docker compose exec backend python seed.py
 docker compose exec -T db psql "<your DATABASE_URL without +psycopg>" < backend/demo_data.sql
 ```
 
@@ -54,7 +55,8 @@ Other commands:
 | Backend tests (they use their own database) | `docker compose exec backend pytest` |
 | Frontend tests | `docker compose exec frontend npm test` |
 | Production build check | `docker compose exec frontend npm run build` |
-| Empty a local database and seed it again (refuses Neon) | `docker compose exec backend flask --app app reset-db` |
+| Empty a local database and seed it again (refuses Neon) | `docker compose exec backend python seed.py --reset` |
+| Run the overdue job and the reminders now (as if on a day) | `docker compose exec backend python reminders.py --once [2026-10-06]` |
 | After a change to `requirements.txt` or `package.json` | `docker compose up --build` |
 
 The app uses no AI service. The OCR evaluation for the report is in [eval/](eval/README.md).
