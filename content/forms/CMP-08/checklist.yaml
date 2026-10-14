@@ -14,10 +14,6 @@ items:
     label: "Your total sales of these 3 months"
     required: true
     help: "Look in your sales book or your bank passbook"
-  - key: reverse_charge_purchases
-    label: "Things you bought where YOU pay the GST (reverse charge)"
-    required: false
-    help: "Only if you have any"
   - key: tax_payment_funds
     label: "Enough money in the bank to pay the GST"
     required: true

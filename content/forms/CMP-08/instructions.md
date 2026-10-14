@@ -18,11 +18,10 @@ status: DONE
 2. Click **Services**, then **Returns**, then **Returns Dashboard**.
 3. Pick the **year** and the **3 months** (quarter). Then click **CMP-08** and **Prepare online**.
 4. Write your **sales** for these 3 months. The portal calls sales "outward supplies".
-5. Did you buy things where **you** pay the GST, not the seller? Write them too. The portal calls this "reverse charge". If not, leave it empty.
-6. The portal shows how much GST you must pay. Check it.
-7. Pay it from your **GST cash** on the portal (called "electronic cash ledger"). You cannot pay it with GST you paid on your purchases.
-8. Click **File**. Use the OTP sent to your phone (EVC), or your digital signature (DSC) if you have one.
-9. Download the receipt. It has a number called **ARN**. Keep it safe.
+5. The portal shows how much GST you must pay. Check it.
+6. Pay it from your **GST cash** on the portal (called "electronic cash ledger"). You cannot pay it with GST you paid on your purchases.
+7. Click **File**. Use the OTP sent to your phone (EVC), or your digital signature (DSC) if you have one.
+8. Download the receipt. It has a number called **ARN**. Keep it safe.
 
 ## After filing
 - Come back to this page and click **Mark as filed**.
@@ -31,7 +30,6 @@ status: DONE
 
 ## Common mistakes
 - Writing the sales of the **whole year**. Write only the sales of **these 3 months**.
-- Forgetting the "reverse charge" purchases.
 
 ## Official websites
 - GST portal: <https://www.gst.gov.in>

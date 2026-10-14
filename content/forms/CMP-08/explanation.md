@@ -25,15 +25,12 @@ The last day to file is shown on this page and in your calendar.
 
 ## What if I am late?
 - There is no late fee for CMP-08.
-- But if you pay the tax late, you must pay **extra money (interest)**.
 - Your yearly form, GSTR-4, is made from your CMP-08 forms. So do not skip it.
 
 ## Can I do it myself?
 **Yes, most people can.** You only need your sales for the 3 months.
 
-Ask a CA (tax expert) for help if:
-- you bought things where **you** pay the GST, not the seller (the portal calls this "reverse charge"), or
-- you are not sure you can still stay in the composition scheme.
+Ask a CA (tax expert) for help if you are not sure you can still stay in the composition scheme.
 
 ## Official websites
 - GST portal: <https://www.gst.gov.in>
