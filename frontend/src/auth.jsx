@@ -4,56 +4,53 @@ import { createContext, useContext, useLayoutEffect, useState } from "react";
 import { apiFetch, setAuth } from "@/api";
 import { clearSession, loadSession, saveSession } from "@/lib";
 
-// --- AuthProvider ------------------------------------------------------------------------------
+// What useAuth() gives: user, login, logout, clickedLogout.
+export const AuthContext = createContext(null);
 
-/** Holds the session (token + user) and gives the token to apiFetch(); a 401 ends it. */
+/** Holds the saved login (token + user) and gives the token to apiFetch(); a 401 ends it. */
 export function AuthProvider({ children }) {
   const queryClient = useQueryClient();
-  const [session, setSession] = useState(loadSession);
-  const [loggedOutOnPurpose, setLoggedOutOnPurpose] = useState(false);
+  const [savedLogin, setSavedLogin] = useState(loadSession());
+  const [clickedLogout, setClickedLogout] = useState(false);
 
   function endSession() {
     clearSession();
-    setSession(null);
+    setSavedLogin(null);
     queryClient.clear(); // never show one user's cached data to the next
   }
 
   function logout() {
-    setLoggedOutOnPurpose(true);
+    setClickedLogout(true);
     endSession();
   }
 
-  // A layout effect, not useEffect: React runs all layout effects before any
-  // useEffect, so the token is in place before pages start fetching.
+  // Give the token to apiFetch before the pages load their data.
   useLayoutEffect(() => {
-    setAuth(session?.accessToken ?? null, endSession);
-  }, [session]);
+    const token = savedLogin ? savedLogin.accessToken : null;
+    setAuth(token, endSession);
+  }, [savedLogin]);
 
   async function login(email, password) {
     const data = await apiFetch("/api/v1/auth/login", {
       method: "POST",
       body: { email, password },
     });
-    const next = { accessToken: data.access_token, user: data.user };
-    saveSession(next);
-    setLoggedOutOnPurpose(false);
-    setSession(next);
+    const newLogin = { accessToken: data.access_token, user: data.user };
+    saveSession(newLogin);
+    setClickedLogout(false);
+    setSavedLogin(newLogin);
     return data.user;
   }
 
-  const value = { user: session?.user ?? null, login, logout, loggedOutOnPurpose };
+  const user = savedLogin ? savedLogin.user : null;
+  const shared = { user, login, logout, clickedLogout };
 
-  return <AuthContext value={value}>{children}</AuthContext>;
+  return <AuthContext.Provider value={shared}>{children}</AuthContext.Provider>;
 }
-
-// --- useAuth -----------------------------------------------------------------------------------
-
-/** { user, login(email, password), logout(), loggedOutOnPurpose } from AuthProvider. */
-export const AuthContext = createContext(null);
 
 /** Current user plus login/logout. Use inside <AuthProvider>. */
 export function useAuth() {
-  const value = useContext(AuthContext);
-  if (!value) throw new Error("useAuth() must be used inside <AuthProvider>");
-  return value;
+  const shared = useContext(AuthContext);
+  if (!shared) throw new Error("useAuth() must be used inside <AuthProvider>");
+  return shared;
 }

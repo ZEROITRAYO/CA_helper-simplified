@@ -16,10 +16,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
  * - Throws ApiRequestError (status, code, message) for every error response.
  * - A 401 on a request that carried a token logs the user out (the token expired or
  *   the account no longer exists).
- * - A request with no answer after REQUEST_TIMEOUT_MS fails with code TIMEOUT, so a
+ * - A request with no answer after REQUEST_TIMEOUT fails with code TIMEOUT, so a
  *   hung server shows a clear message instead of a page that never finishes.
  *
- * The hooks below use it through useGet(), post(), put() and sendForm().
+ * The functions below use it directly, or through useGet() and sendForm().
  */
 
 /** A failed API call: switch on `code` (e.g. INVALID_CREDENTIALS) and show `message`. */
@@ -32,8 +32,8 @@ export class ApiRequestError extends Error {
   }
 }
 
-// How long a request may take before it fails with code TIMEOUT.
-export const REQUEST_TIMEOUT_MS = 20_000;
+// How long a request may take, in milliseconds (20000 ms = 20 seconds), before it fails with code TIMEOUT.
+export const REQUEST_TIMEOUT = 20_000;
 
 // The logged-in user's token and how to log them out. AuthProvider
 // (auth.jsx) sets both through setAuth() whenever the session changes.
@@ -45,6 +45,25 @@ export function setAuth(token, logoutFunction) {
   logout = logoutFunction;
 }
 
+// My PR #7 version (no timeout yet). The timeout below is added later, see MY_LATER_TODO.md.
+//
+// export async function apiFetch(path, { method = "GET", body } = {}) {
+//   const headers = {};
+//   const isForm = body instanceof FormData; // a file upload: the browser sets the type
+//   if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
+//   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+//
+//   const response = await fetch(path, {
+//     method,
+//     headers,
+//     body: body === undefined || isForm ? body : JSON.stringify(body),
+//   });
+//   // No body (204) or not JSON (e.g. a proxy's HTML error page): null.
+//   const data = await response.json().catch(() => null);
+//   if (response.ok) return data;
+//   fail(response, data, headers.Authorization);
+// }
+
 export async function apiFetch(path, { method = "GET", body } = {}) {
   const headers = {};
   const isForm = body instanceof FormData; // a file upload: the browser sets the type
@@ -52,7 +71,7 @@ export async function apiFetch(path, { method = "GET", body } = {}) {
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
   let response;
   let data;
   try {
@@ -93,12 +112,13 @@ export async function apiDownload(path) {
 // Throws the ApiRequestError of a failed response; a 401 to a request with a token logs out.
 function fail(response, data, hadToken) {
   if (response.status === 401 && hadToken) logout();
-  const error = data?.error; // the standard error body: {error: {code, message}}
-  throw new ApiRequestError(
-    response.status,
-    error?.code ?? "HTTP_ERROR",
-    error?.message ?? `The server answered ${response.status}.`,
-  );
+  let code = "HTTP_ERROR";
+  let message = response.status;
+  if (data && data.error) {
+    code = data.error.code;
+    message = data.error.message;
+  }
+  throw new ApiRequestError(response.status, code, message);
 }
 
 /** Text to show for any error thrown by a query: the API's message, or a network hint. */
@@ -126,25 +146,13 @@ function useGet(queryKey, path, { notFound, ...options } = {}) {
   return useQuery({ queryKey, queryFn: () => get(path, notFound), ...options });
 }
 
-function post(path, body) {
-  return apiFetch(path, { method: "POST", body });
-}
-
-function put(path, body) {
-  return apiFetch(path, { method: "PUT", body });
-}
-
-function remove(path) {
-  return apiFetch(path, { method: "DELETE" });
-}
-
 // POST a file upload: every field that has a value (a File or text) goes in the form.
 function sendForm(path, fields) {
   const form = new FormData();
   for (const [name, value] of Object.entries(fields)) {
     if (value) form.append(name, value);
   }
-  return post(path, form);
+  return apiFetch(path, { method: "POST", body: form });
 }
 
 // path?name=value&... without the empty values ("", null or undefined).
@@ -160,7 +168,11 @@ function withQuery(path, params) {
 /** refresh(KEY, OTHER_KEY, ...): load these cached queries again, after a change. */
 export function useRefresh() {
   const queryClient = useQueryClient();
-  return (...keys) => keys.forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
+  return function refresh(...keys) {
+    for (const key of keys) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+  };
 }
 
 // --- health ------------------------------------------------------------------------------------
@@ -182,25 +194,31 @@ export function useHealth() {
 
 /** The new (unverified) user. Signing up is only possible after ticking "I agree to the Terms". */
 export function signup({ full_name, email, password, role }) {
-  return post("/api/v1/auth/signup", { full_name, email, password, role, terms_accepted: true });
+  return apiFetch("/api/v1/auth/signup", {
+    method: "POST",
+    body: { full_name, email, password, role, terms_accepted: true },
+  });
 }
 
 /** The 6-digit code emailed at signup. */
 export function verifyEmail(email, code) {
-  return post("/api/v1/auth/verify-email", { email, code });
+  return apiFetch("/api/v1/auth/verify-email", { method: "POST", body: { email, code } });
 }
 
 export function resendVerificationCode(email) {
-  return post("/api/v1/auth/verify-email/resend", { email });
+  return apiFetch("/api/v1/auth/verify-email/resend", { method: "POST", body: { email } });
 }
 
 /** Emails a reset code. */
 export function forgotPassword(email) {
-  return post("/api/v1/auth/forgot-password", { email });
+  return apiFetch("/api/v1/auth/forgot-password", { method: "POST", body: { email } });
 }
 
 export function resetPassword(email, code, newPassword) {
-  return post("/api/v1/auth/reset-password", { email, code, new_password: newPassword });
+  return apiFetch("/api/v1/auth/reset-password", {
+    method: "POST",
+    body: { email, code, new_password: newPassword },
+  });
 }
 
 
@@ -213,7 +231,10 @@ export function useSettings() {
 
 /** Switch the notification emails on or off; returns the settings. */
 export function saveSettings(emailNotifications) {
-  return put("/api/v1/auth/settings", { email_notifications: emailNotifications });
+  return apiFetch("/api/v1/auth/settings", {
+    method: "PUT",
+    body: { email_notifications: emailNotifications },
+  });
 }
 
 // --- onboarding --------------------------------------------------------------------------------
@@ -227,12 +248,12 @@ export function useMyBusiness() {
 
 /** Registers the business (once); the backend works out the profile and makes the filings. */
 export function registerBusiness(form) {
-  return post("/api/v1/onboarding/business", form);
+  return apiFetch("/api/v1/onboarding/business", { method: "POST", body: form });
 }
 
 /** Edits the business; the answer also has changes: { profile: [{line, old, new}], filings }. */
 export function updateBusiness(form) {
-  return put("/api/v1/onboarding/business", form);
+  return apiFetch("/api/v1/onboarding/business", { method: "PUT", body: form });
 }
 
 /** Searches the NIC list by code or words, once at least 2 characters are typed. */
@@ -244,7 +265,7 @@ export function useNicSearch(query) {
 
 /** Returns { code, description }. */
 export function saveNicCode(code) {
-  return put("/api/v1/onboarding/business/nic-code", { code });
+  return apiFetch("/api/v1/onboarding/business/nic-code", { method: "PUT", body: { code } });
 }
 
 /** The states with their GST codes; reference data, so it is loaded once. */
@@ -283,11 +304,17 @@ export function useFiling(itemId) {
 
 /** path is "self" (file it myself) or "ca" (with a CA). */
 export function chooseFilingPath(itemId, path) {
-  return post("/api/v1/compliance/items/" + itemId + "/path", { path });
+  return apiFetch("/api/v1/compliance/items/" + itemId + "/path", {
+    method: "POST",
+    body: { path },
+  });
 }
 
 export function tickChecklist(itemId, key, ticked) {
-  return post("/api/v1/compliance/items/" + itemId + "/checklist", { key, ticked });
+  return apiFetch("/api/v1/compliance/items/" + itemId + "/checklist", {
+    method: "POST",
+    body: { key, ticked },
+  });
 }
 
 /** "I filed it myself". Both the ARN and the file are optional. */
@@ -298,7 +325,7 @@ export function markFiled(itemId, acknowledgementNo, file) {
 
 /** Undo a mistaken "mark as filed". */
 export function unmarkFiled(itemId) {
-  return post("/api/v1/compliance/items/" + itemId + "/unmark-filed");
+  return apiFetch("/api/v1/compliance/items/" + itemId + "/unmark-filed", { method: "POST" });
 }
 
 /** The uploaded acknowledgement file (a Blob), loaded only when there is one. */
@@ -347,20 +374,20 @@ export function uploadDocument(file, fields) {
 
 /** Fails with DOCUMENT_IN_USE for the proof of a filed filing. */
 export function deleteDocument(documentId) {
-  return remove("/api/v1/documents/" + documentId);
+  return apiFetch("/api/v1/documents/" + documentId, { method: "DELETE" });
 }
 
 /** Link a vault file to a filing's checklist entry ("general" for none); ticks the entry. */
 export function linkDocument(documentId, complianceItemId, checklistKey) {
-  return post("/api/v1/documents/" + documentId + "/links", {
-    compliance_item_id: complianceItemId,
-    checklist_key: checklistKey,
+  return apiFetch("/api/v1/documents/" + documentId + "/links", {
+    method: "POST",
+    body: { compliance_item_id: complianceItemId, checklist_key: checklistKey },
   });
 }
 
 /** Remove one link (its id is in the document's `links`). */
 export function unlinkDocument(linkId) {
-  return remove("/api/v1/documents/links/" + linkId);
+  return apiFetch("/api/v1/documents/links/" + linkId, { method: "DELETE" });
 }
 
 /** Download the file and save it under its own name. */
@@ -384,7 +411,7 @@ export function useNotifications(page) {
 }
 
 export function markNotificationRead(notificationId) {
-  return post(`/api/v1/alerts/notifications/${notificationId}/read`);
+  return apiFetch(`/api/v1/alerts/notifications/${notificationId}/read`, { method: "POST" });
 }
 
 /** One filing's late fee estimate; taxDue ("" or an amount) adds the interest. */
@@ -411,7 +438,7 @@ export function useCaProfile() {
 
 /** Returns the saved profile. */
 export function saveCaProfile(profile) {
-  return put("/api/v1/marketplace/ca-profile", profile);
+  return apiFetch("/api/v1/marketplace/ca-profile", { method: "PUT", body: profile });
 }
 
 /** The Certificate of Practice; returns the profile, now waiting for an admin check. */
@@ -450,7 +477,7 @@ export function useCaServices() {
 
 /** Saves the CA's whole price menu (it replaces the old one). */
 export function saveCaServices(items) {
-  return put("/api/v1/marketplace/ca-services", { items });
+  return apiFetch("/api/v1/marketplace/ca-services", { method: "PUT", body: { items } });
 }
 
 // --- Engagements (a business working with a CA) --------------------------------------------
@@ -467,7 +494,10 @@ export function useRequestableFilings(caId) {
 
 /** items = [{ compliance_item_id, service_id }] */
 export function sendRequest(caId, items) {
-  return post("/api/v1/marketplace/engagements", { ca_profile_id: caId, items });
+  return apiFetch("/api/v1/marketplace/engagements", {
+    method: "POST",
+    body: { ca_profile_id: caId, items },
+  });
 }
 
 /** The business's engagements, newest first; null before the business is registered. */
@@ -482,7 +512,10 @@ export function useCaEngagements() {
 
 /** e.g. engagementAction(id, "accept") or (id, "rating", { stars, review }). */
 export function engagementAction(engagementId, action, body) {
-  return post("/api/v1/marketplace/engagements/" + engagementId + "/" + action, body);
+  return apiFetch("/api/v1/marketplace/engagements/" + engagementId + "/" + action, {
+    method: "POST",
+    body: body,
+  });
 }
 
 // --- caWorkspace -------------------------------------------------------------------------------
@@ -512,15 +545,14 @@ export function useCaBatches() {
 
 /** The CA asks the client for a document for one filing ("general" for no checklist entry). */
 export function createDocumentRequest(businessId, complianceItemId, checklistKey, message) {
-  return post("/api/v1/ca-workspace/clients/" + businessId + "/document-requests", {
-    compliance_item_id: complianceItemId,
-    checklist_key: checklistKey,
-    message,
+  return apiFetch("/api/v1/ca-workspace/clients/" + businessId + "/document-requests", {
+    method: "POST",
+    body: { compliance_item_id: complianceItemId, checklist_key: checklistKey, message },
   });
 }
 
 export function cancelDocumentRequest(requestId) {
-  return post("/api/v1/ca-workspace/document-requests/" + requestId + "/cancel");
+  return apiFetch("/api/v1/ca-workspace/document-requests/" + requestId + "/cancel", { method: "POST" });
 }
 
 /** The CA filed one filing. Both the ARN and the file are optional. */
@@ -539,7 +571,7 @@ export function useMyDocumentRequests(itemId) {
 /** Answer a request with a document already in the vault (upload it first if needed). */
 export function fulfilDocumentRequest(requestId, documentId) {
   const path = "/api/v1/ca-workspace/document-requests/" + requestId + "/fulfil";
-  return post(path, { document_id: documentId });
+  return apiFetch(path, { method: "POST", body: { document_id: documentId } });
 }
 
 // --- admin -------------------------------------------------------------------------------------
@@ -586,9 +618,9 @@ export function useCertificateFile(caId, enabled) {
 }
 
 export function verifyCa(caId) {
-  return post("/api/v1/admin/cas/" + caId + "/verify");
+  return apiFetch("/api/v1/admin/cas/" + caId + "/verify", { method: "POST" });
 }
 
 export function rejectCa(caId, reason) {
-  return post("/api/v1/admin/cas/" + caId + "/reject", { reason });
+  return apiFetch("/api/v1/admin/cas/" + caId + "/reject", { method: "POST", body: { reason } });
 }
