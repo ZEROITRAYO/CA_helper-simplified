@@ -184,11 +184,11 @@ export function AppShell({ role, nav }) {
  * from landing on pages that would fail.
  */
 export function RequireRole({ role, children }) {
-  const { user, loggedOutOnPurpose } = useAuth();
+  const { user, clickedLogout } = useAuth();
   const location = useLocation();
 
   if (!user) {
-    const state = loggedOutOnPurpose ? undefined : { from: location.pathname };
+    const state = clickedLogout ? undefined : { from: location.pathname };
     return <Navigate to="/login" replace state={state} />;
   }
   if (user.role !== role) {

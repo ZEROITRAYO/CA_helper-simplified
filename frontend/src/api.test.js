@@ -5,7 +5,7 @@ import {
   apiFetch,
   ApiRequestError,
   errorMessage,
-  REQUEST_TIMEOUT_MS,
+  REQUEST_TIMEOUT,
   setAuth,
 } from "@/api";
 import { fakeApi } from "@/test/utils";
@@ -88,7 +88,7 @@ describe("errorMessage", () => {
 
     const call = apiFetch("/api/v1/x");
     const failed = expect(call).rejects.toMatchObject({ code: "TIMEOUT", status: 0 });
-    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT);
     await failed;
     vi.useRealTimers();
   });
