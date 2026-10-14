@@ -5,29 +5,35 @@ status: DONE
 
 # How to file GSTR-4 yourself
 
-<!-- Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Content rule
-     (content/README.md): no legal thresholds, rates or due dates here; the app shows them from the
-     rule tables. -->
+<!-- Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Rewritten in very
+     simple English on 14 Oct 2026 (same facts). Content rule (content/README.md): no legal thresholds,
+     rates or due dates here; the app shows them from the rule tables. -->
 
 ## Before you start
-Tick the documents in the checklist on this page, and keep your login details ready.
+- First, file **all your CMP-08 forms** of the year.
+- Look at the list of papers on this page. Tick each one when you have it.
+- Keep your GST username, password and phone ready. You will get an OTP on the phone.
 
 ## Steps
-1. Log in to the GST portal and open **Services → Returns → Annual Return**.
-2. Choose the financial year and open **GSTR-4 (Annual return) → Prepare online**.
-3. Check the turnover and tax, filled in from your CMP-08 statements.
-4. Add the year's purchases (inward supplies), from registered and unregistered suppliers.
-5. Pay anything due (and any late fee) from the electronic cash ledger, preview, then **File** with DSC or EVC (OTP) and download the acknowledgement with the **ARN**.
+1. Open the GST portal and log in.
+2. Click **Services**, then **Returns**, then **Annual Return**.
+3. Pick the **year**. Then click **GSTR-4 (Annual return)** and **Prepare online**.
+4. The portal shows your sales and tax from your CMP-08 forms. Check them.
+5. Write everything you **bought** in the year. The portal calls this "inward supplies". Add bills from **all** sellers, with a GST number or without one.
+6. If you must pay anything (or a late fee), pay it from your **GST cash** on the portal (called "electronic cash ledger").
+7. Click **Preview** and check everything once more.
+8. Click **File**. Use the OTP sent to your phone (EVC), or your digital signature (DSC) if you have one.
+9. Download the receipt. It has a number called **ARN**. Keep it safe.
 
 ## After filing
-Click **Mark as filed** on this page and upload the acknowledgement (PDF or photo), so you and your CA can
-always find it. The app reads the acknowledgement on our server and marks the filing "Filed–verified" when it
-matches.
+- Come back to this page and click **Mark as filed**.
+- Upload the receipt (a PDF or a photo). Then you and your CA can always find it.
+- The app reads the receipt. If it matches, the app shows "Filed–verified".
 
 ## Common mistakes
-- Filing before every CMP-08 of the year is filed.
-- Leaving out purchases from unregistered suppliers.
+- Filing GSTR-4 before all your CMP-08 forms are filed.
+- Forgetting things bought from sellers who have **no** GST number.
 
-## Official sources
+## Official websites
 - GST portal: <https://www.gst.gov.in>
-- GST portal FAQ, Form GSTR-4 (Annual Return): <https://tutorial.gst.gov.in/userguide/returns/faq_GSTR4annual.htm>
+- GST portal help for GSTR-4: <https://tutorial.gst.gov.in/userguide/returns/faq_GSTR4annual.htm>

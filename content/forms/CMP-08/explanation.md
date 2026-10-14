@@ -3,27 +3,38 @@ form: CMP-08
 status: DONE
 ---
 
-# CMP-08: what it is and why it matters
+# CMP-08: what is it?
 
-<!-- Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Content rule
-     (content/README.md): no legal thresholds, rates or due dates here; the app shows them from the
-     rule tables. -->
+<!-- Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Rewritten in very
+     simple English on 14 Oct 2026 (same facts). Content rule (content/README.md): no legal thresholds,
+     rates or due dates here; the app shows them from the rule tables. -->
 
 ## What is it?
-CMP-08 is the statement in which a business in the **composition scheme** reports its turnover and pays its GST for the quarter. It takes the place of GSTR-1 and GSTR-3B for these businesses.
+CMP-08 is a small GST form.
+In it, you tell the government how much you **sold** in the last 3 months.
+Then you **pay the GST** for those 3 months.
 
-## Who has to file it?
-Businesses that chose the GST composition scheme. The app shows it when your profile says "Composition".
+## Who must fill it?
+Shops and businesses in the GST **composition scheme**.
+This is a simple GST plan for small businesses.
+Your profile in this app says "Composition" if you are in it.
 
-## How often, and for which period?
-Quarterly, one statement per quarter of the financial year. The due date is shown on this page and in your calendar.
+## How often?
+**4 times a year**, once every 3 months.
+The last day to file is shown on this page and in your calendar.
 
-## What happens if it is late or skipped?
-There is no late fee for a late CMP-08, but tax paid late brings interest. The yearly GSTR-4 also builds on your CMP-08 statements.
+## What if I am late?
+- There is no late fee for CMP-08.
+- But if you pay the tax late, you must pay **extra money (interest)**.
+- Your yearly form, GSTR-4, is made from your CMP-08 forms. So do not skip it.
 
-## Filing it yourself vs. with a CA
-Most composition businesses can file it themselves: it needs only the quarter's turnover. A CA helps if you also have purchases under reverse charge or are unsure whether you still qualify for the scheme.
+## Can I do it myself?
+**Yes, most people can.** You only need your sales for the 3 months.
 
-## Official sources
+Ask a CA (tax expert) for help if:
+- you bought things where **you** pay the GST, not the seller (the portal calls this "reverse charge"), or
+- you are not sure you can still stay in the composition scheme.
+
+## Official websites
 - GST portal: <https://www.gst.gov.in>
-- GST portal FAQ, Filing Form GST CMP-08: <https://tutorial.gst.gov.in/userguide/returns/FAQs_CMP02.htm>
+- GST portal help for CMP-08: <https://tutorial.gst.gov.in/userguide/returns/FAQs_CMP02.htm>

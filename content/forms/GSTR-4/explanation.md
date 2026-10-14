@@ -3,27 +3,41 @@ form: GSTR-4
 status: DONE
 ---
 
-# GSTR-4: what it is and why it matters
+# GSTR-4: what is it?
 
-<!-- Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Content rule
-     (content/README.md): no legal thresholds, rates or due dates here; the app shows them from the
-     rule tables. -->
+<!-- Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Rewritten in very
+     simple English on 14 Oct 2026 (same facts). Content rule (content/README.md): no legal thresholds,
+     rates or due dates here; the app shows them from the rule tables. -->
 
 ## What is it?
-GSTR-4 is the **yearly** GST return of a business in the composition scheme. It brings together the quarterly CMP-08 statements and adds the year's purchases.
+GSTR-4 is your **yearly** GST form.
+It adds up all your CMP-08 forms of the year.
+It also lists what you **bought** in the year.
 
-## Who has to file it?
-Businesses that were in the composition scheme during the financial year, even for part of it (for example when they left the scheme or their registration was cancelled). The app shows it when your profile says "Composition".
+## Who must fill it?
+Shops and businesses in the GST **composition scheme**.
+This is a simple GST plan for small businesses.
+Your profile in this app says "Composition" if you are in it.
 
-## How often, and for which period?
-Once a year, for the whole financial year. The due date is shown on this page and in your calendar.
+You must still file it if you were in the scheme for only **part** of the year.
+For example, if you left the scheme, or your GST number was closed.
 
-## What happens if it is late or skipped?
-A late return brings a late fee, which must be paid before the portal accepts the return.
+## How often?
+**Once a year**, for the whole year.
+The last day to file is shown on this page and in your calendar.
 
-## Filing it yourself vs. with a CA
-If your CMP-08 statements were filed correctly, the tax part of GSTR-4 is filled in for you. A CA helps if figures differ from your books or you left the scheme during the year.
+## What if I am late?
+You must pay a **late fee**.
+The portal will not take your form until you pay it.
 
-## Official sources
+## Can I do it myself?
+**Yes, if all your CMP-08 forms were filed right.**
+Then the portal fills in the tax part for you.
+
+Ask a CA (tax expert) for help if:
+- the numbers on the portal do not match your own books, or
+- you left the composition scheme during the year.
+
+## Official websites
 - GST portal: <https://www.gst.gov.in>
-- GST portal FAQ, Form GSTR-4 (Annual Return): <https://tutorial.gst.gov.in/userguide/returns/faq_GSTR4annual.htm>
+- GST portal help for GSTR-4: <https://tutorial.gst.gov.in/userguide/returns/faq_GSTR4annual.htm>

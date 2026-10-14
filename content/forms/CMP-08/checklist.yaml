@@ -11,17 +11,17 @@ form: CMP-08
 status: DONE
 items:
   - key: quarter_turnover
-    label: "Total sales of the quarter"
+    label: "Your total sales of these 3 months"
     required: true
-    help: "From your sales register or bank credits"
+    help: "Look in your sales book or your bank passbook"
   - key: reverse_charge_purchases
-    label: "Purchases under reverse charge"
+    label: "Things you bought where YOU pay the GST (reverse charge)"
     required: false
     help: "Only if you have any"
   - key: tax_payment_funds
-    label: "Money in the bank to pay the GST due"
+    label: "Enough money in the bank to pay the GST"
     required: true
   - key: gst_portal_login
-    label: "GST portal username and password"
+    label: "Your GST website username and password"
     required: true
-    help: "And the registered mobile for the OTP"
+    help: "And the phone you gave to GST. The OTP comes to it."
