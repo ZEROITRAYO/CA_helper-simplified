@@ -11,17 +11,17 @@ form: GSTR-4
 status: DONE
 items:
   - key: cmp08_statements
-    label: "All CMP-08 statements of the year"
+    label: "All your CMP-08 forms of the year"
     required: true
-    help: "Each quarter must be filed first"
+    help: "File every CMP-08 first"
   - key: yearly_sales
-    label: "Total sales of the year"
+    label: "Your total sales of the whole year"
     required: true
   - key: yearly_purchases
-    label: "Purchase invoices of the year"
+    label: "All your purchase bills of the year"
     required: true
-    help: "From registered and unregistered suppliers"
+    help: "From all sellers, with a GST number or without one"
   - key: gst_portal_login
-    label: "GST portal username and password"
+    label: "Your GST website username and password"
     required: true
-    help: "And the registered mobile for the OTP"
+    help: "And the phone you gave to GST. The OTP comes to it."
