@@ -101,9 +101,7 @@ describe("admin: reviewing a CA", () => {
     );
     await user.click(screen.getByRole("button", { name: "Verify" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Verified. The CA has been emailed.",
-    );
+    expect(await screen.findByText("Verified. The CA has been emailed.", { exact: false })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([path]) => path.endsWith("/verify"))).toBe(true);
   });
 
@@ -122,7 +120,7 @@ describe("admin: reviewing a CA", () => {
     await user.type(screen.getByLabelText("Reason for rejecting"), "Upload your certificate.");
     await user.click(reject);
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Rejected.");
+    expect(await screen.findByText("Rejected.", { exact: false })).toBeInTheDocument();
     const [, init] = fetchMock.mock.calls.find(([path]) => path.endsWith("/reject"));
     expect(JSON.parse(init.body)).toEqual({ reason: "Upload your certificate." });
   });

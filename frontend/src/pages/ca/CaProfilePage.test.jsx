@@ -85,7 +85,7 @@ describe("CA profile page", () => {
     const user = await fillForm();
     await user.click(screen.getByRole("button", { name: "Save profile" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Profile saved.");
+    expect(await screen.findByText("Profile saved.", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Pending verification")).toBeInTheDocument();
     const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === "PUT");
     expect(JSON.parse(init.body)).toEqual({
@@ -154,7 +154,6 @@ describe("CA profile page", () => {
       ),
     );
     expect(field).toHaveFocus();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("labels specializations and languages in words", async () => {

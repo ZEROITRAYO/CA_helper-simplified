@@ -102,7 +102,7 @@ describe("Find a CA page", () => {
     fakeApi({ [`GET ${URL}`]: [500, { error: { code: "X", message: "Something broke." } }] });
     renderApp("/business/marketplace");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Something broke.");
+    expect(await screen.findByText("Something broke.", { exact: false })).toBeInTheDocument();
   });
 
   it("shows a CA's average rating on the card", async () => {

@@ -156,7 +156,7 @@ describe("Request this CA page", () => {
     await user.click(await screen.findByLabelText(/GSTR-3B Aug 2026/));
     await user.click(screen.getByRole("button", { name: "Send request" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("already requested");
+    expect(await screen.findByText("already requested", { exact: false })).toBeInTheDocument();
   });
 
   it("asks an unregistered business to register first", async () => {

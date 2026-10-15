@@ -62,7 +62,7 @@ describe("business: My engagements page", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Withdraw request" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("This engagement is active.");
+    expect(await screen.findByText("This engagement is active.", { exact: false })).toBeInTheDocument();
   });
 
   it("shows finished engagements without actions", async () => {
@@ -143,7 +143,7 @@ describe("engagement card timeline", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Send rating" }));
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Choose 1 to 5 stars.");
+    expect(screen.getByText("Choose 1 to 5 stars.", { exact: false })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
   });
 

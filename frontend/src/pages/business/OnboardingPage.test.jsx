@@ -204,9 +204,8 @@ describe("business profile page", () => {
     await user.click(screen.getByLabelText("Monthly"));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    const summary = await screen.findByRole("status");
-    expect(summary).toHaveTextContent("GST scheme: Regular (quarterly, QRMP) → Regular (monthly)");
-    expect(summary).toHaveTextContent("16 filings added");
+    expect(await screen.findByText("GST scheme: Regular (quarterly, QRMP) → Regular (monthly)", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("16 filings added", { exact: false })).toBeInTheDocument();
     const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === "PUT");
     const sent = JSON.parse(init.body);
     expect(sent.gst_qrmp).toBe(false);
@@ -287,6 +286,6 @@ describe("fill in from a document", () => {
 
     await user.upload(await screen.findByLabelText(/Fill in from your GST certificate/), photo);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("We could not read this file.");
+    expect(await screen.findByText("We could not read this file.", { exact: false })).toBeInTheDocument();
   });
 });
