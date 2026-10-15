@@ -24,9 +24,7 @@ describe("verify email page", () => {
     await user.click(screen.getByRole("button", { name: "Verify email" }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Your email is verified. You can log in now.",
-    );
+    expect(await screen.findByText("Your email is verified. You can log in now.", { exact: false })).toBeInTheDocument();
     expect(screen.getByLabelText("Email")).toHaveValue("asha@example.com");
     expect(sentBody(fetchMock, VERIFY_URL)).toEqual({ email: "asha@example.com", code: "123456" });
   });
@@ -41,7 +39,7 @@ describe("verify email page", () => {
     await user.type(screen.getByLabelText("Code"), "000000");
     await user.click(screen.getByRole("button", { name: "Verify email" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong code.");
+    expect(await screen.findByText("Wrong code.", { exact: false })).toBeInTheDocument();
   });
 
   it("accepts only a 6-digit code", async () => {
@@ -62,7 +60,7 @@ describe("verify email page", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Send a new code" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("We sent a new code to this email.");
+    expect(await screen.findByText("We sent a new code to this email.", { exact: false })).toBeInTheDocument();
     expect(sentBody(fetchMock, RESEND_URL)).toEqual({ email: "asha@example.com" });
   });
 

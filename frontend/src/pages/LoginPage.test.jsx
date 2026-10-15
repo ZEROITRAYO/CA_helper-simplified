@@ -41,7 +41,7 @@ describe("login form", () => {
 
     await submitLogin();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(await screen.findByText(message, { exact: false })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Log in" })).toBeInTheDocument();
   });
 

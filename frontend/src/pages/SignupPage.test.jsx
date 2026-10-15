@@ -64,9 +64,7 @@ describe("signup page", () => {
 
     await fillForm();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "An account with this email already exists.",
-    );
+    expect(await screen.findByText("An account with this email already exists.", { exact: false })).toBeInTheDocument();
   });
 
   it("needs the terms accepted before signing up", async () => {

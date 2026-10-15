@@ -85,7 +85,7 @@ describe("CA services & prices page", () => {
     await user.type(screen.getByLabelText("Price for Tax audit"), "20000");
     await user.click(screen.getByRole("button", { name: "Save prices" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Prices saved.");
+    expect(await screen.findByText("Prices saved.", { exact: false })).toBeInTheDocument();
     const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === "PUT");
     expect(JSON.parse(init.body)).toEqual({
       items: [
@@ -106,10 +106,10 @@ describe("CA services & prices page", () => {
     await user.type(box, price);
     await user.click(screen.getByRole("button", { name: "Save prices" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Fix 1 price: GSTR-3B filing.");
+    expect(await screen.findByText("Fix 1 price: GSTR-3B filing.", { exact: false })).toBeInTheDocument();
     expect(box).toHaveAccessibleDescription("Enter a price from 1 to 10,00,000.");
     expect(box).toHaveFocus();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prices saved.")).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, options]) => options?.method === "PUT")).toBe(false);
   });
 

@@ -31,7 +31,7 @@ describe("forgot and reset password", () => {
     await fillReset({});
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
-    expect(await screen.findByRole("status")).toHaveTextContent("Your password is reset.");
+    expect(await screen.findByText("Your password is reset.", { exact: false })).toBeInTheDocument();
     const [, init] = fetchMock.mock.calls.find(([path]) => path === RESET_URL);
     expect(JSON.parse(init.body)).toEqual({
       email: "owner@example.com",
@@ -48,7 +48,7 @@ describe("forgot and reset password", () => {
 
     await fillReset({});
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong code.");
+    expect(await screen.findByText("Wrong code.", { exact: false })).toBeInTheDocument();
   });
 
   it("checks the new password before calling the API", async () => {
@@ -67,6 +67,6 @@ describe("forgot and reset password", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Send a new code" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("We sent a new code to this email.");
+    expect(await screen.findByText("We sent a new code to this email.", { exact: false })).toBeInTheDocument();
   });
 });

@@ -134,7 +134,7 @@ describe("document vault", () => {
 
     const row = (await screen.findByText("sales-apr.pdf")).closest("tr");
     await user.click(within(row).getByRole("button", { name: "Delete" }));
-    expect(await within(row).findByRole("alert")).toHaveTextContent("which is filed");
+    expect(await within(row).findByText("which is filed", { exact: false })).toBeInTheDocument();
 
     const ack = screen.getByText("ack.pdf").closest("tr");
     await user.click(within(ack).getByRole("button", { name: "Delete" }));

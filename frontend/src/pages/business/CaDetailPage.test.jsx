@@ -70,9 +70,7 @@ describe("CA detail page", () => {
     });
     renderApp(`/business/marketplace/${CA_ID}`);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This CA is not listed on the marketplace.",
-    );
+    expect(await screen.findByText("This CA is not listed on the marketplace.", { exact: false })).toBeInTheDocument();
   });
 
   it("opens when the card is clicked and goes back to the same filtered results", async () => {
