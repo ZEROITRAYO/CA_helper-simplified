@@ -1,0 +1,30 @@
+{
+  "form": "GSTR-4",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages in explanation.json.",
+  "items": [
+    {
+      "key": "cmp08_statements",
+      "label": "All your CMP-08 forms of the year",
+      "required": true,
+      "help": "File every CMP-08 first"
+    },
+    {
+      "key": "yearly_sales",
+      "label": "Your total sales of the whole year",
+      "required": true
+    },
+    {
+      "key": "yearly_purchases",
+      "label": "All your purchase bills of the year",
+      "required": true,
+      "help": "From all sellers, with a GST number or without one"
+    },
+    {
+      "key": "gst_portal_login",
+      "label": "Your GST website username and password",
+      "required": true,
+      "help": "And the phone you gave to GST. The OTP comes to it."
+    }
+  ]
+}

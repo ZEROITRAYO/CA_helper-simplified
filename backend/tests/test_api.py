@@ -5,7 +5,7 @@ import re
 from datetime import date
 
 from conftest import BUSINESS_FORM
-from filings import due_date, periods_of_year
+from filings import FORM_FOLDERS, due_date, form_content, periods_of_year
 from helpers import gstin_check_character, outbox
 from models import CaProfile, ComplianceItem, ObligationTemplate, db
 from ocr import read_proof_fields
@@ -136,6 +136,13 @@ def test_due_dates_and_periods():
 
 def test_gstin_check_character():
     assert gstin_check_character("27ABCDE1234F1Z") == "0"
+
+
+def test_every_form_has_its_texts():
+    for form_code in FORM_FOLDERS:
+        content = form_content(form_code)
+        assert content["explanation"].startswith("# ") and content["instructions"].startswith("# ")
+        assert content["checklist"]
 
 
 def test_nic_search_and_save(client, owner):

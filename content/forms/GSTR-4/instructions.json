@@ -1,0 +1,58 @@
+{
+  "form": "GSTR-4",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Rewritten in very simple English on 14 Oct 2026 (same facts). Content rule (content/README.md): no legal thresholds, rates or due dates here; the app shows them from the rule tables.",
+  "title": "How to file GSTR-4 yourself",
+  "sections": [
+    {
+      "heading": "Before you start",
+      "points": [
+        "First, file **all your CMP-08 forms** of the year.",
+        "Look at the list of papers on this page. Tick each one when you have it.",
+        "Keep your GST username, password and phone ready. You will get an OTP on the phone."
+      ]
+    },
+    {
+      "heading": "Steps",
+      "steps": [
+        "Open the GST portal and log in.",
+        "Click **Services**, then **Returns**, then **Annual Return**.",
+        "Pick the **year**. Then click **GSTR-4 (Annual return)** and **Prepare online**.",
+        "The portal shows your sales and tax from your CMP-08 forms. Check them.",
+        "Write everything you **bought** in the year. The portal calls this \"inward supplies\". Add bills from **all** sellers, with a GST number or without one.",
+        "If you must pay anything (or a late fee), pay it from your **GST cash** on the portal (called \"electronic cash ledger\").",
+        "Click **Preview** and check everything once more.",
+        "Click **File**. Use the OTP sent to your phone (EVC), or your digital signature (DSC) if you have one.",
+        "Download the receipt. It has a number called **ARN**. Keep it safe."
+      ]
+    },
+    {
+      "heading": "After filing",
+      "points": [
+        "Come back to this page and click **Mark as filed**.",
+        "Upload the receipt (a PDF or a photo). Then you and your CA can always find it.",
+        "The app reads the receipt. If it matches, the app shows \"Filed–verified\"."
+      ]
+    },
+    {
+      "heading": "Common mistakes",
+      "points": [
+        "Filing GSTR-4 before all your CMP-08 forms are filed.",
+        "Forgetting things bought from sellers who have **no** GST number."
+      ]
+    },
+    {
+      "heading": "Official websites",
+      "links": [
+        {
+          "label": "GST portal",
+          "url": "https://www.gst.gov.in"
+        },
+        {
+          "label": "GST portal help for GSTR-4",
+          "url": "https://tutorial.gst.gov.in/userguide/returns/faq_GSTR4annual.htm"
+        }
+      ]
+    }
+  ]
+}

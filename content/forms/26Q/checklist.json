@@ -1,0 +1,35 @@
+{
+  "form": "26Q",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages in explanation.json.",
+  "items": [
+    {
+      "key": "payment_vouchers",
+      "label": "Payments of the quarter on which TDS was deducted",
+      "required": true,
+      "help": "Contractor bills, fees, rent"
+    },
+    {
+      "key": "payee_pans",
+      "label": "PAN of every payee",
+      "required": true
+    },
+    {
+      "key": "tds_challans",
+      "label": "TDS challans paid for the quarter",
+      "required": true,
+      "help": "Challan number, date and amount"
+    },
+    {
+      "key": "lower_deduction_certificates",
+      "label": "Lower-deduction certificates of payees",
+      "required": false,
+      "help": "Only if a payee gave you one"
+    },
+    {
+      "key": "tan_login",
+      "label": "TAN and e-filing portal login",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "form": "CMP-08",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages in explanation.json.",
+  "items": [
+    {
+      "key": "quarter_turnover",
+      "label": "Your total sales of these 3 months",
+      "required": true,
+      "help": "Look in your sales book or your bank passbook"
+    },
+    {
+      "key": "tax_payment_funds",
+      "label": "Enough money in the bank to pay the GST",
+      "required": true
+    },
+    {
+      "key": "gst_portal_login",
+      "label": "Your GST website username and password",
+      "required": true,
+      "help": "And the phone you gave to GST. The OTP comes to it."
+    }
+  ]
+}

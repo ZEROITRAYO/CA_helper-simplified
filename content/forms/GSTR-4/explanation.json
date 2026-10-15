@@ -1,0 +1,57 @@
+{
+  "form": "GSTR-4",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Rewritten in very simple English on 14 Oct 2026 (same facts). Content rule (content/README.md): no legal thresholds, rates or due dates here; the app shows them from the rule tables.",
+  "title": "GSTR-4: what is it?",
+  "sections": [
+    {
+      "heading": "What is it?",
+      "text": [
+        "GSTR-4 is your **yearly** GST form. It adds up all your CMP-08 forms of the year. It also lists what you **bought** in the year."
+      ]
+    },
+    {
+      "heading": "Who must fill it?",
+      "text": [
+        "Shops and businesses in the GST **composition scheme**. This is a simple GST plan for small businesses. Your profile in this app says \"Composition\" if you are in it.",
+        "You must still file it if you were in the scheme for only **part** of the year. For example, if you left the scheme, or your GST number was closed."
+      ]
+    },
+    {
+      "heading": "How often?",
+      "text": [
+        "**Once a year**, for the whole year. The last day to file is shown on this page and in your calendar."
+      ]
+    },
+    {
+      "heading": "What if I am late?",
+      "text": [
+        "You must pay a **late fee**. The portal will not take your form until you pay it."
+      ]
+    },
+    {
+      "heading": "Can I do it myself?",
+      "text": [
+        "**Yes, if all your CMP-08 forms were filed right.** Then the portal fills in the tax part for you.",
+        "Ask a CA (tax expert) for help if:"
+      ],
+      "points": [
+        "the numbers on the portal do not match your own books, or",
+        "you left the composition scheme during the year."
+      ]
+    },
+    {
+      "heading": "Official websites",
+      "links": [
+        {
+          "label": "GST portal",
+          "url": "https://www.gst.gov.in"
+        },
+        {
+          "label": "GST portal help for GSTR-4",
+          "url": "https://tutorial.gst.gov.in/userguide/returns/faq_GSTR4annual.htm"
+        }
+      ]
+    }
+  ]
+}

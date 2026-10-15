@@ -1,0 +1,47 @@
+{
+  "form": "ITR",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages in explanation.json.",
+  "items": [
+    {
+      "key": "pan_aadhaar",
+      "label": "PAN and Aadhaar (linked)",
+      "required": true
+    },
+    {
+      "key": "ais_26as",
+      "label": "AIS and Form 26AS from the e-filing portal",
+      "required": true,
+      "help": "Shows income and TDS the department knows about"
+    },
+    {
+      "key": "bank_statements",
+      "label": "Bank statements of the year",
+      "required": true
+    },
+    {
+      "key": "profit_and_loss",
+      "label": "Profit and loss account and balance sheet",
+      "required": false,
+      "help": "Not needed under the presumptive scheme"
+    },
+    {
+      "key": "tds_certificates",
+      "label": "TDS certificates (Form 16A) received",
+      "required": false,
+      "help": "If clients deducted TDS from your payments"
+    },
+    {
+      "key": "gst_returns",
+      "label": "GST returns of the year",
+      "required": false,
+      "help": "If you are GST registered"
+    },
+    {
+      "key": "audit_report",
+      "label": "Tax audit report",
+      "required": false,
+      "help": "Only if a tax audit applies to you"
+    }
+  ]
+}
