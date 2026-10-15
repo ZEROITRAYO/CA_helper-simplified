@@ -1,0 +1,35 @@
+{
+  "form": "24Q",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages in explanation.json.",
+  "items": [
+    {
+      "key": "salary_register",
+      "label": "Salary register of the quarter",
+      "required": true,
+      "help": "Salary and TDS of each employee"
+    },
+    {
+      "key": "employee_pans",
+      "label": "PAN of every employee",
+      "required": true
+    },
+    {
+      "key": "tds_challans",
+      "label": "TDS challans paid for the quarter",
+      "required": true,
+      "help": "Challan number, date and amount"
+    },
+    {
+      "key": "investment_declarations",
+      "label": "Employees' tax-saving declarations",
+      "required": false,
+      "help": "Used to work out their TDS"
+    },
+    {
+      "key": "tan_login",
+      "label": "TAN and e-filing portal login",
+      "required": true
+    }
+  ]
+}
