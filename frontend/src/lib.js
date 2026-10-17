@@ -350,7 +350,7 @@ export const newPasswordSchema = z
   .regex(/[0-9]/, PASSWORD_RULE_TEXT);
 
 /** The 6-digit code from an email (spaces around it are ignored). */
-export const codeSchema = z
+export const otpSchema = z
   .string()
   .trim()
   .regex(/^[0-9]{6}$/, "Enter the 6-digit code from the email.");
