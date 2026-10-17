@@ -217,36 +217,37 @@ def read_proof_fields(text, today):
 
 
 def read_registration(text):
-    """PAN, GSTIN, name, state and entity type from a GST certificate or PAN card."""
     clean = _clean(text)
     found = {}
     gstin = GSTIN.search(clean)
+
     if gstin:
-        found["gstin"] = gstin.group(0)
-        found["pan"] = gstin.group(0)[2:12]  # a GSTIN contains the PAN
+        found["gstin"] = gstin[0]
+        found["pan"] = gstin[0][2:12]
         for state in GST_STATES:
-            if state["code"] == gstin.group(0)[:2]:
+            if state["code"] == gstin[0][:2]:
                 found["state"] = state["name"]
     else:
         pan = PAN.search(clean)
         if pan:
-            found["pan"] = pan.group(0)
+            found["pan"] = pan[0]
 
-    # "1. Legal Name ASHA TRADERS" on a GST certificate; a "Name" line followed by the
-    # name on a PAN card.
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for index, line in enumerate(lines):
+        next_line = lines[index + 1] if index + 1 < len(lines) else ""
         legal = re.search(r"LEGAL NAME\s*[:\-]?\s*(.*)", line, flags=re.IGNORECASE)
-        value = None
         if legal:
-            value = legal.group(1) or (lines[index + 1] if index + 1 < len(lines) else "")
+            value = legal.group(1) or next_line
         elif re.fullmatch(r"(?:.*/\s*)?NAME\s*:?", line, flags=re.IGNORECASE):
-            value = lines[index + 1] if index + 1 < len(lines) else ""
+            value = next_line
+        else:
+            continue
         if value and not PAN.search(value.upper()):
             found["legal_name"] = value.strip()[:200]
             break
 
-    for words, entity_type in CONSTITUTIONS.items():
-        if "CONSTITUTION OF BUSINESS" in clean and words in clean:
-            found["entity_type"] = entity_type  # the longest names are checked last
+    if "CONSTITUTION OF BUSINESS" in clean:
+        for words, entity_type in CONSTITUTIONS.items():
+            if words in clean:
+                found["entity_type"] = entity_type  # the longest names are checked last
     return found
