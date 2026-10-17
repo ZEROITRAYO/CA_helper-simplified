@@ -386,7 +386,7 @@ const STYLES = [
   "[&_a]:text-primary [&_a]:underline-offset-4 [&_a]:hover:underline",
 ].join(" ");
 
-/** Shows a Markdown text (e.g. a form's explanation from content/forms/) as formatted text. */
+/** Shows a Markdown text (e.g. a form's explanation, made from content/forms/<FORM>/explanation.json) as formatted text. */
 export function Markdown({ children }) {
   return (
     <div className={STYLES}>

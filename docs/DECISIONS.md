@@ -4,6 +4,19 @@ Newest first. One entry per decision: date, what, why. Anything decided in chat 
 in the same PR.
 
 
+## 2026-10-15: Form content is JSON
+
+**What**
+- `content/forms/<FORM>/` holds `explanation.json`, `instructions.json` and `checklist.json` instead of
+  `explanation.md`, `instructions.md` and `checklist.yaml`. Same text, same checklist keys.
+- `filings.page_markdown()` turns a page's sections into the Markdown the filing page shows, so the API and the
+  frontend are unchanged. `PyYAML` is removed (nothing else used it).
+- The field notes that were comments in the YAML files are in `content/README.md`.
+
+**Why**
+- One format for every content file, and one package fewer.
+
+
 ## 2026-10-08: The backend rewritten in beginner style
 
 **What** (every feature and the API stay the same; the frontend is unchanged)

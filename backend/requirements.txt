@@ -16,10 +16,6 @@ argon2-cffi==25.1.0
 # Fernet encryption of PAN, GSTIN, TAN and phone (EncryptedString in app/models.py).
 cryptography==50.0.1
 
-# --- Content files ---
-# Reads content/forms/<FORM>/checklist.yaml (compliance form content, CO6).
-PyYAML==6.0.3
-
 # --- OCR (local only: documents never leave our server) ---
 # Reads the text of PDFs and turns PDF pages into images for Tesseract (app/ocr.py).
 # The `tesseract` program itself is installed with apt (docker-compose.yml, CI).

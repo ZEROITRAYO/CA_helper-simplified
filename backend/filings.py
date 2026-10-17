@@ -3,10 +3,9 @@
 # an uploaded acknowledgement. The legal dates come from obligation_templates (seed.py).
 
 import calendar
-import re
+import json
 from datetime import date
 
-import yaml
 from flask import request
 
 from helpers import REPO, error, iso, read_upload, save_document, now
@@ -174,24 +173,37 @@ def sync_filings(business_id, profile, today):
 
 def checklist(form_code):
     """The documents to have ready: [{key, label, required, help}]."""
-    path = REPO / "content/forms" / FORM_FOLDERS[form_code] / "checklist.yaml"
+    path = REPO / "content/forms" / FORM_FOLDERS[form_code] / "checklist.json"
     entries = []
-    for item in yaml.safe_load(path.read_text()).get("items") or []:
+    for item in json.loads(path.read_text()).get("items") or []:
         entries.append({"key": item["key"], "label": item["label"],
                         "required": bool(item.get("required")), "help": item.get("help")})
     return entries
 
 
+def page_markdown(page):
+    """One explanation.json or instructions.json as the Markdown text the filing page shows."""
+    blocks = ["# " + page["title"]]
+    for section in page["sections"]:
+        blocks.append("## " + section["heading"])
+        blocks += section.get("text", [])
+        if section.get("points"):
+            blocks.append("\n".join("- " + point for point in section["points"]))
+        if section.get("steps"):
+            blocks.append("\n".join(f"{number}. {step}" for number, step in enumerate(section["steps"], 1)))
+        blocks += section.get("text_after", [])
+        if section.get("links"):
+            blocks.append("\n".join(f"- {link['label']}: <{link['url']}>" for link in section["links"]))
+    return "\n\n".join(blocks)
+
+
 def form_content(form_code):
     """The form's explanation and instructions (Markdown) and how finished they are."""
     result = {"form_code": form_code, "status": "DONE", "checklist": checklist(form_code)}
-    for page in ("explanation", "instructions"):
-        text = (REPO / "content/forms" / FORM_FOLDERS[form_code] / f"{page}.md").read_text()
-        status = "TODO"
-        if text.startswith("---"):  # a small front matter block with the page's status
-            _, front, text = text.split("---", 2)
-            status = (yaml.safe_load(front) or {}).get("status", "TODO")
-        result[page] = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL).strip()  # drop writers' notes
+    for name in ("explanation", "instructions"):
+        page = json.loads((REPO / "content/forms" / FORM_FOLDERS[form_code] / f"{name}.json").read_text())
+        result[name] = page_markdown(page)  # the "note" for writers is never shown
+        status = page.get("status", "TODO")
         if status == "TODO" or (status == "DRAFT" and result["status"] == "DONE"):
             result["status"] = status
     return result

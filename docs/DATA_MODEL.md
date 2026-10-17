@@ -56,7 +56,7 @@ Column types are in `models.py`; this lists what each table is for and its key f
 |---|---|---|
 | `obligation_templates` | how a form applies and when it is due | form_code, name, frequency, applicability (JSONB), due_date_rule (JSONB), source_reference, effective_from, effective_to. Unique (form_code, frequency, effective_from): GSTR-1 monthly and quarterly are two templates |
 | `compliance_items` | one filing of one business for one period | business_id → businesses, template_id → obligation_templates, form_code, fy, period_label, period_start, period_end, due_date, status, filing_path (null until chosen), filed_at, acknowledgement_no, verified_at, acknowledgement_document_id → documents. **Unique (business_id, form_code, period_start)** |
-| `checklist_ticks` | a ticked checklist entry of one filing | compliance_item_id, checklist_key (from `content/forms/<FORM>/checklist.yaml`). Unique (item, key). Unticking deletes the row |
+| `checklist_ticks` | a ticked checklist entry of one filing | compliance_item_id, checklist_key (from `content/forms/<FORM>/checklist.json`). Unique (item, key). Unticking deletes the row |
 
 ### Documents
 | Table | One row is... | Key fields |

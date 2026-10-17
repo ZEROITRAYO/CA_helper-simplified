@@ -1,0 +1,64 @@
+{
+  "form": "26Q",
+  "status": "DONE",
+  "note": "Reviewed on 29 Sep 2026 against the official pages listed at the bottom (V1). Content rule (content/README.md): no legal thresholds, rates or due dates here; the app shows them from the rule tables.",
+  "title": "How to file Form 140 (earlier 26Q) yourself",
+  "sections": [
+    {
+      "heading": "Before you start",
+      "text": [
+        "Tick the documents in the checklist on this page, and keep your TAN login for the income-tax e-filing portal ready."
+      ]
+    },
+    {
+      "heading": "Steps",
+      "steps": [
+        "Download the latest **Return Preparation Utility (RPU)** from the Protean (TIN-NSDL) website: **Downloads → e-TDS/e-TCS → Quarterly return**.",
+        "Enter your TAN details, the TDS challans you paid, and each payment: payee PAN, amount, TDS and the type of payment (section).",
+        "Validate the return in the utility; it creates the **FVU** file. Fix any errors it shows, then put the FVU file in a .zip file.",
+        "Log in to the income-tax e-filing portal with your TAN and open **e-File → Income Tax Forms → File Income Tax Forms**.",
+        "Choose the TDS form (Form 140 for tax year 2026-27 onwards, 26Q for earlier periods), the year and the quarter, upload the .zip file and **e-verify** it.",
+        "Keep the acknowledgement. The portal emails you when the return is accepted or rejected (with the reason)."
+      ]
+    },
+    {
+      "heading": "After filing",
+      "text": [
+        "Click **Mark as filed** on this page and upload the acknowledgement (PDF or photo), so you and your CA can always find it. The app reads the acknowledgement on our server and marks the filing \"Filed–verified\" when it matches."
+      ]
+    },
+    {
+      "heading": "Common mistakes",
+      "points": [
+        "Wrong or missing PAN of an employee or payee.",
+        "A challan entered with the wrong amount or date.",
+        "Uploading an FVU made with an old version of the utility."
+      ]
+    },
+    {
+      "heading": "Official sources",
+      "links": [
+        {
+          "label": "Income-tax e-filing portal",
+          "url": "https://www.incometax.gov.in"
+        },
+        {
+          "label": "Form 138 (earlier 24Q) user manual",
+          "url": "https://www.incometax.gov.in/iec/foportal/newformpage/forms/form138-um"
+        },
+        {
+          "label": "Form 140 (earlier 26Q) user manual",
+          "url": "https://www.incometax.gov.in/iec/foportal/newformpage/forms/form140-um"
+        },
+        {
+          "label": "Protean (TIN-NSDL), for the return preparation utility",
+          "url": "https://www.protean-tinpan.com"
+        },
+        {
+          "label": "TRACES",
+          "url": "https://www.tdscpc.gov.in"
+        }
+      ]
+    }
+  ]
+}
