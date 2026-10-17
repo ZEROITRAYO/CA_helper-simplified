@@ -27,33 +27,19 @@ import {
   linkClass,
 } from "@/components/ui";
 import {
-  codeSchema,
+  otpSchema,
   emailSchema,
-  label,
   newPasswordSchema,
   PASSWORD_RULE_TEXT,
   PASSWORDS_MATCH_ERROR,
   passwordsMatch,
   ROLE_HOME,
-  USER_ROLE_LABELS,
 } from "@/lib";
 
 // --- Pieces of the account forms ---------------------------------------------------------------
 
 function EmailField({ form }) {
   return <FormField label="Email" type="email" autoComplete="email" {...field(form, "email")} />;
-}
-
-function CodeField({ form }) {
-  return (
-    <FormField
-      label="Code"
-      inputMode="numeric"
-      autoComplete="one-time-code"
-      maxLength={6}
-      {...field(form, "code")}
-    />
-  );
 }
 
 /** "Password" (or "New password") with the rule under it, and "Confirm ...". */
@@ -86,37 +72,32 @@ function SubmitButton({ form, busyText, children }) {
   );
 }
 
-/** The server's error or a notice: message is {}, { error } or { notice }. */
-function Messages({ message }) {
-  return (
-    <>
-      <ErrorText>{message.error}</ErrorText>
-      <Notice>{message.notice}</Notice>
-    </>
-  );
-}
-
 /** "Send a new code", once the email box holds a valid email. */
 function ResendButton({ form, send, setMessage }) {
-  const [resending, setResending] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   async function onResend() {
     setMessage({});
-    if (!(await form.trigger("email"))) return;
-    setResending(true);
+
+    // Check the email box first: a wrong email shows its error under the box.
+    const emailIsValid = await form.trigger("email");
+    if (!emailIsValid) {
+      return;
+    }
+
+    setLoading(true);
     try {
       await send(form.getValues("email"));
       setMessage({ notice: "We sent a new code to this email." });
     } catch (error) {
       setMessage({ error: errorMessage(error) });
-    } finally {
-      setResending(false);
     }
+    setLoading(false);
   }
 
   return (
-    <Button type="button" variant="outline" className="w-full" disabled={resending} onClick={onResend}>
-      {resending ? "Sending..." : "Send a new code"}
+    <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={onResend}>
+      {loading ? "Sending..." : "Send a new code"}
     </Button>
   );
 }
@@ -359,12 +340,14 @@ export function SignupPage() {
         <EmailField form={form} />
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">I am signing up as</legend>
-          {SIGNUP_ROLES.map((role) => (
-            <label key={role} className="flex items-center gap-2 text-sm">
-              <input type="radio" value={role} {...form.register("role")} />
-              {label(USER_ROLE_LABELS, role)}
-            </label>
-          ))}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="radio" value="business" {...form.register("role")} />
+            Business
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="radio" value="ca" {...form.register("role")} />
+            Chartered Accountant
+          </label>
           {errors.role && <p className="text-sm text-danger">{errors.role.message}</p>}
         </fieldset>
         <NewPasswordFields form={form} />
@@ -396,7 +379,7 @@ export function SignupPage() {
 
 // --- VerifyEmailPage ---------------------------------------------------------------------------
 
-const verifySchema = z.object({ email: emailSchema, code: codeSchema });
+const verifySchema = z.object({ email: emailSchema, code: otpSchema });
 
 /** /verify-email: enter the 6-digit code from the signup email, or get a new one. */
 export function VerifyEmailPage() {
@@ -428,8 +411,15 @@ export function VerifyEmailPage() {
     >
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <EmailField form={form} />
-        <CodeField form={form} />
-        <Messages message={message} />
+        <FormField
+          label="Code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          {...field(form, "code")}
+        />
+        <ErrorText>{message.error}</ErrorText>
+        <Notice>{message.notice}</Notice>
         <SubmitButton form={form} busyText="Verifying...">
           Verify email
         </SubmitButton>
@@ -486,7 +476,7 @@ export function ForgotPasswordPage() {
 const resetSchema = z
   .object({
     email: emailSchema,
-    code: codeSchema,
+    code: otpSchema,
     password: newPasswordSchema,
     confirm_password: z.string(),
   })
@@ -518,9 +508,16 @@ export function ResetPasswordPage() {
     >
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <EmailField form={form} />
-        <CodeField form={form} />
+        <FormField
+          label="Code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          {...field(form, "code")}
+        />
         <NewPasswordFields form={form} title="New password" />
-        <Messages message={message} />
+        <ErrorText>{message.error}</ErrorText>
+        <Notice>{message.notice}</Notice>
         <SubmitButton form={form} busyText="Saving...">
           Reset password
         </SubmitButton>
